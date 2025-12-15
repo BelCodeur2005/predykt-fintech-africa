@@ -240,7 +240,8 @@ public class VATRecoverabilityService {
         if (!oldCategory.equals(newCategory)) {
             // Récupérer l'ID de la règle qui a été appliquée (si disponible)
             VATRecoverabilityRuleEngine.DetectionResult detectionResult = ruleEngine.detectCategory(
-                transaction.getLedgerEntry() != null ? transaction.getLedgerEntry().getAccountNumber() : "",
+                transaction.getLedgerEntry() != null && transaction.getLedgerEntry().getAccount() != null
+                    ? transaction.getLedgerEntry().getAccount().getAccountNumber() : "",
                 transaction.getDescription() != null ? transaction.getDescription() : ""
             );
 
@@ -333,7 +334,7 @@ public class VATRecoverabilityService {
         VATRecoverabilityRuleEngine.DetectionResult detection = ruleEngine.detectCategory(
             companyId,
             context != null ? context.getTenantId() : null,
-            context != null ? context.getCabinetId() : null,
+            context != null && context.getCabinetId() != null ? context.getCabinetId().toString() : null,
             accountNumber,
             description
         );

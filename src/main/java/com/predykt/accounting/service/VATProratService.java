@@ -87,7 +87,6 @@ public class VATProratService {
                 .isLocked(false)
                 .calculationDate(LocalDateTime.now())
                 .notes(notes)
-                .createdBy(createdBy)
                 .build();
         }
 

@@ -7,6 +7,7 @@ import com.predykt.accounting.dto.request.FixedAssetCreateRequest;
 import com.predykt.accounting.dto.request.FixedAssetDisposalRequest;
 import com.predykt.accounting.dto.request.FixedAssetUpdateRequest;
 import com.predykt.accounting.dto.response.FixedAssetResponse;
+import com.predykt.accounting.exception.AccountingException;
 import com.predykt.accounting.exception.ResourceNotFoundException;
 import com.predykt.accounting.exception.ValidationException;
 import com.predykt.accounting.mapper.FixedAssetMapper;

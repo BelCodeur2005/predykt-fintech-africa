@@ -44,6 +44,7 @@ public class PaymentResponse {
 
     // Moyen de paiement
     private PaymentMethod paymentMethod;
+    private Long bankAccountId;  // ID du compte bancaire si virement
     private String chequeNumber;
     private String mobileMoneyNumber;
     private String transactionReference;

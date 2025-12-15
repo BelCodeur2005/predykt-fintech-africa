@@ -1,5 +1,6 @@
 package com.predykt.accounting.service;
 
+import com.predykt.accounting.domain.entity.ChartOfAccounts;
 import com.predykt.accounting.domain.entity.Company;
 import com.predykt.accounting.domain.entity.FixedAsset;
 import com.predykt.accounting.domain.entity.GeneralLedger;
@@ -348,25 +349,22 @@ public class JournalEntryGenerationService {
             String entryType) {
 
         // Vérifier que le compte existe dans le plan comptable
-        chartOfAccountsRepository.findByCompanyAndAccountNumber(company, accountNumber)
+        ChartOfAccounts account = chartOfAccountsRepository.findByCompanyAndAccountNumber(company, accountNumber)
             .orElseThrow(() -> new AccountingException(
                 "Compte OHADA non trouvé: " + accountNumber + " - Veuillez l'ajouter au plan comptable"));
 
         GeneralLedger entry = GeneralLedger.builder()
             .company(company)
+            .account(account)
             .entryDate(entryDate)
-            .accountNumber(accountNumber)
-            .accountName(accountName)
             .description(description)
             .debitAmount(debitAmount)
             .creditAmount(creditAmount)
             .journalCode(journalCode)
-            .pieceNumber(pieceNumber)
-            .referenceNumber(UUID.randomUUID().toString().substring(0, 8).toUpperCase())
-            .fiscalYear(entryDate.getYear())
-            .fiscalPeriod(entryDate.getMonthValue())
+            .reference(pieceNumber != null ? pieceNumber : UUID.randomUUID().toString().substring(0, 8).toUpperCase())
+            .fiscalYear(String.valueOf(entryDate.getYear()))
+            .period(String.format("%04d-%02d", entryDate.getYear(), entryDate.getMonthValue()))
             .isLocked(false)
-            .isReconciled(false)
             .build();
 
         // Métadonnées pour traçabilité

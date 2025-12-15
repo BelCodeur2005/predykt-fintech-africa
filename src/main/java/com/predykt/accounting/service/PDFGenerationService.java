@@ -88,10 +88,10 @@ public class PDFGenerationService {
 
         // Récupérer les données
         Company company = companyRepository.findById(companyId)
-            .orElseThrow(() -> new ResourceNotFoundException("Entreprise", "id", companyId));
+            .orElseThrow(() -> new ResourceNotFoundException("Entreprise avec id " + companyId + " non trouvée"));
 
         Deposit deposit = depositRepository.findById(depositId)
-            .orElseThrow(() -> new ResourceNotFoundException("Acompte", "id", depositId));
+            .orElseThrow(() -> new ResourceNotFoundException("Acompte avec id " + depositId + " non trouvé"));
 
         // Vérifier que l'acompte appartient à l'entreprise
         if (!deposit.getCompany().getId().equals(companyId)) {

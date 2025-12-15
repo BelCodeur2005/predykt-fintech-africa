@@ -74,13 +74,13 @@ public class DepositApplicationService {
 
         // 1. Récupérer les entités
         Company company = companyRepository.findById(companyId)
-            .orElseThrow(() -> new ResourceNotFoundException("Entreprise", "id", companyId));
+            .orElseThrow(() -> new ResourceNotFoundException("Entreprise avec id " + companyId + " non trouvée"));
 
         Deposit deposit = depositRepository.findById(depositId)
-            .orElseThrow(() -> new ResourceNotFoundException("Acompte", "id", depositId));
+            .orElseThrow(() -> new ResourceNotFoundException("Acompte avec id " + depositId + " non trouvé"));
 
         Invoice invoice = invoiceRepository.findById(invoiceId)
-            .orElseThrow(() -> new ResourceNotFoundException("Facture", "id", invoiceId));
+            .orElseThrow(() -> new ResourceNotFoundException("Facture avec id " + invoiceId + " non trouvée"));
 
         // 2. Validations métier
         validatePartialApplication(deposit, invoice, amountToApply, company);
@@ -139,7 +139,7 @@ public class DepositApplicationService {
         log.warn("⚠️ Annulation imputation partielle ID {}", applicationId);
 
         DepositApplication application = applicationRepository.findById(applicationId)
-            .orElseThrow(() -> new ResourceNotFoundException("Imputation", "id", applicationId));
+            .orElseThrow(() -> new ResourceNotFoundException("Imputation avec id " + applicationId + " non trouvée"));
 
         // Vérifier l'entreprise
         if (!application.getCompany().getId().equals(companyId)) {
@@ -285,8 +285,8 @@ public class DepositApplicationService {
             .accountNumber("4191")
             .description(String.format("Imputation partielle %s sur facture %s",
                 deposit.getDepositNumber(), invoice.getInvoiceNumber()))
-            .debit(application.getAmountHt())
-            .credit(BigDecimal.ZERO)
+            .debitAmount(application.getAmountHt())
+            .creditAmount(BigDecimal.ZERO)
             .build());
 
         // DÉBIT: Compte 4431 - TVA collectée
@@ -294,8 +294,8 @@ public class DepositApplicationService {
             .accountNumber("4431")
             .description(String.format("TVA sur imputation partielle %s",
                 deposit.getDepositNumber()))
-            .debit(application.getVatAmount())
-            .credit(BigDecimal.ZERO)
+            .debitAmount(application.getVatAmount())
+            .creditAmount(BigDecimal.ZERO)
             .build());
 
         // CRÉDIT: Compte 411 - Clients
@@ -303,8 +303,8 @@ public class DepositApplicationService {
             .accountNumber("411")
             .description(String.format("Imputation partielle acompte %s",
                 deposit.getDepositNumber()))
-            .debit(BigDecimal.ZERO)
-            .credit(application.getAmountTtc())
+            .debitAmount(BigDecimal.ZERO)
+            .creditAmount(application.getAmountTtc())
             .build());
 
         // Créer l'écriture comptable
@@ -319,11 +319,11 @@ public class DepositApplicationService {
             .build();
 
         try {
-            GeneralLedger entry = generalLedgerService.createEntry(
+            List<GeneralLedger> entries = generalLedgerService.recordJournalEntry(
                 deposit.getCompany().getId(),
                 journalEntry
             );
-            return entry.getId();
+            return entries.isEmpty() ? null : entries.get(0).getId();
         } catch (Exception e) {
             log.error("❌ Erreur lors de la création de l'écriture comptable d'imputation partielle", e);
             throw new ValidationException("Échec de la création de l'écriture comptable: " + e.getMessage());
@@ -344,10 +344,10 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public List<DepositApplication> getApplicationsByDeposit(Long companyId, Long depositId) {
         Deposit deposit = depositRepository.findById(depositId)
-            .orElseThrow(() -> new ResourceNotFoundException("Acompte", "id", depositId));
+            .orElseThrow(() -> new ResourceNotFoundException("Acompte avec id " + depositId + " non trouvé"));
 
         Company company = companyRepository.findById(companyId)
-            .orElseThrow(() -> new ResourceNotFoundException("Entreprise", "id", companyId));
+            .orElseThrow(() -> new ResourceNotFoundException("Entreprise avec id " + companyId + " non trouvée"));
 
         return applicationRepository.findByCompanyAndDeposit(company, deposit);
     }
@@ -362,10 +362,10 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public List<DepositApplication> getApplicationsByInvoice(Long companyId, Long invoiceId) {
         Invoice invoice = invoiceRepository.findById(invoiceId)
-            .orElseThrow(() -> new ResourceNotFoundException("Facture", "id", invoiceId));
+            .orElseThrow(() -> new ResourceNotFoundException("Facture avec id " + invoiceId + " non trouvée"));
 
         Company company = companyRepository.findById(companyId)
-            .orElseThrow(() -> new ResourceNotFoundException("Entreprise", "id", companyId));
+            .orElseThrow(() -> new ResourceNotFoundException("Entreprise avec id " + companyId + " non trouvée"));
 
         return applicationRepository.findByCompanyAndInvoice(company, invoice);
     }
@@ -380,7 +380,7 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public DepositApplication getApplicationById(Long companyId, Long applicationId) {
         DepositApplication application = applicationRepository.findById(applicationId)
-            .orElseThrow(() -> new ResourceNotFoundException("Imputation", "id", applicationId));
+            .orElseThrow(() -> new ResourceNotFoundException("Imputation avec id " + applicationId + " non trouvée"));
 
         if (!application.getCompany().getId().equals(companyId)) {
             throw new ValidationException("Cette imputation n'appartient pas à l'entreprise spécifiée");
@@ -399,7 +399,7 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public Page<DepositApplication> getAllApplications(Long companyId, Pageable pageable) {
         Company company = companyRepository.findById(companyId)
-            .orElseThrow(() -> new ResourceNotFoundException("Entreprise", "id", companyId));
+            .orElseThrow(() -> new ResourceNotFoundException("Entreprise avec id " + companyId + " non trouvée"));
 
         return applicationRepository.findByCompany(company, pageable);
     }
@@ -414,7 +414,7 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public Page<DepositApplication> getRecentApplications(Long companyId, Pageable pageable) {
         Company company = companyRepository.findById(companyId)
-            .orElseThrow(() -> new ResourceNotFoundException("Entreprise", "id", companyId));
+            .orElseThrow(() -> new ResourceNotFoundException("Entreprise avec id " + companyId + " non trouvée"));
 
         return applicationRepository.findByCompanyOrderByAppliedAtDesc(company, pageable);
     }
@@ -432,7 +432,7 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public BigDecimal getTotalAppliedForDeposit(Long depositId) {
         Deposit deposit = depositRepository.findById(depositId)
-            .orElseThrow(() -> new ResourceNotFoundException("Acompte", "id", depositId));
+            .orElseThrow(() -> new ResourceNotFoundException("Acompte avec id " + depositId + " non trouvé"));
 
         return applicationRepository.sumAmountByDeposit(deposit);
     }
@@ -446,7 +446,7 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public BigDecimal getTotalDepositsForInvoice(Long invoiceId) {
         Invoice invoice = invoiceRepository.findById(invoiceId)
-            .orElseThrow(() -> new ResourceNotFoundException("Facture", "id", invoiceId));
+            .orElseThrow(() -> new ResourceNotFoundException("Facture avec id " + invoiceId + " non trouvée"));
 
         return applicationRepository.sumAmountByInvoice(invoice);
     }
@@ -460,7 +460,7 @@ public class DepositApplicationService {
     @Transactional(readOnly = true)
     public long getApplicationCountForDeposit(Long depositId) {
         Deposit deposit = depositRepository.findById(depositId)
-            .orElseThrow(() -> new ResourceNotFoundException("Acompte", "id", depositId));
+            .orElseThrow(() -> new ResourceNotFoundException("Acompte avec id " + depositId + " non trouvé"));
 
         return applicationRepository.countByDeposit(deposit);
     }

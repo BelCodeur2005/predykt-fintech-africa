@@ -38,6 +38,7 @@ public class NotesAnnexesService {
     private final FixedAssetRepository fixedAssetRepository;
     private final GeneralLedgerRepository generalLedgerRepository;
     private final FinancialReportService financialReportService;
+    private final DepreciationService depreciationService;
 
     private static final BigDecimal TVA_RATE_CAMEROON = new BigDecimal("0.1925"); // 19.25%
     private static final BigDecimal IMPOT_RATE_CAMEROON = new BigDecimal("0.30"); // 30%
@@ -99,7 +100,9 @@ public class NotesAnnexesService {
      * NOTE 2: Immobilisations corporelles et incorporelles
      */
     private Note2_Immobilisations generateNote2_Immobilisations(Company company, Integer fiscalYear) {
-        List<FixedAsset> assets = fixedAssetRepository.findByCompanyAndFiscalYear(company, fiscalYear);
+        LocalDate fiscalYearStart = LocalDate.of(fiscalYear, 1, 1);
+        LocalDate fiscalYearEnd = LocalDate.of(fiscalYear, 12, 31);
+        List<FixedAsset> assets = fixedAssetRepository.findDepreciableForFiscalYear(company, fiscalYearStart, fiscalYearEnd);
 
         // Grouper par catégorie
         List<Note2_Immobilisations.TableauMouvements> mouvements = assets.stream()
@@ -112,7 +115,7 @@ public class NotesAnnexesService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 BigDecimal totalAmortissement = categoryAssets.stream()
-                    .map(asset -> asset.getDepreciation() != null ? asset.getDepreciation() : BigDecimal.ZERO)
+                    .map(asset -> depreciationService.calculateAccumulatedDepreciation(asset, fiscalYear))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
                 return Note2_Immobilisations.TableauMouvements.builder()
@@ -176,7 +179,7 @@ public class NotesAnnexesService {
      */
     private Note3_ImmobilisationsFinancieres generateNote3_ImmobilisationsFinancieres(Company company, LocalDate endDate) {
         // Récupérer les comptes 26x et 27x
-        List<GeneralLedger> immobFinancieres = generalLedgerRepository.findByCompanyAndAccountNumberStartingWithAndEntryDateBefore(
+        List<GeneralLedger> immobFinancieres = generalLedgerRepository.findByCompanyAndAccountNumberStartingWithAndEntryDateLessThanEqual(
             company, "26", endDate);
 
         BigDecimal total = immobFinancieres.stream()
@@ -434,7 +437,7 @@ public class NotesAnnexesService {
      */
     private BigDecimal getAccountBalance(Company company, String accountPrefix, LocalDate asOfDate) {
         List<GeneralLedger> entries = generalLedgerRepository
-            .findByCompanyAndAccountNumberStartingWithAndEntryDateBefore(company, accountPrefix, asOfDate);
+            .findByCompanyAndAccountNumberStartingWithAndEntryDateLessThanEqual(company, accountPrefix, asOfDate);
 
         return entries.stream()
             .map(entry -> entry.getDebitAmount().subtract(entry.getCreditAmount()))
@@ -452,7 +455,7 @@ public class NotesAnnexesService {
     private BigDecimal calculateOverdueAmount(Company company, String accountPrefix,
                                              LocalDate asOfDate, int minDaysOverdue) {
         List<GeneralLedger> entries = generalLedgerRepository
-            .findByCompanyAndAccountNumberStartingWithAndEntryDateBefore(company, accountPrefix, asOfDate);
+            .findByCompanyAndAccountNumberStartingWithAndEntryDateLessThanEqual(company, accountPrefix, asOfDate);
 
         return entries.stream()
             .filter(entry -> {

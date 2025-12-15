@@ -70,7 +70,7 @@ public class VATProrataController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response,
-                        "Prorata " + prorata.getProrataType().getLabel() + " créé/mis à jour avec succès: " +
+                        "Prorata " + prorata.getProrataType().getDisplayName() + " créé/mis à jour avec succès: " +
                                 prorata.getProrataPercentage() + "% récupérable"));
     }
 
@@ -176,7 +176,7 @@ public class VATProrataController {
         VATProrataResponse response = prorataMapper.toResponse(prorata);
 
         return ResponseEntity.ok(ApiResponse.success(response,
-                "Prorata " + prorata.getProrataType().getLabel() + ": " +
+                "Prorata " + prorata.getProrataType().getDisplayName() + ": " +
                         prorata.getProrataPercentage() + "% récupérable"));
     }
 

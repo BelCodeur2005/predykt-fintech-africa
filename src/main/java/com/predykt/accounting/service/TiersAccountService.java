@@ -67,8 +67,7 @@ public class TiersAccountService {
             .company(company)
             .accountNumber(accountNumber)
             .accountName("CLIENT - " + customer.getName())
-            .parentNumber(CUSTOMER_PARENT_ACCOUNT)
-            .accountType(AccountType.ASSET)  // Clients = Actif (créances)
+            .accountType(AccountType.ACTIF_CIRCULANT)  // Clients = Actif circulant (créances)
             .isActive(true)
             .build();
 
@@ -109,8 +108,7 @@ public class TiersAccountService {
             .company(company)
             .accountNumber(accountNumber)
             .accountName("FOURNISSEUR - " + supplier.getName())
-            .parentNumber(SUPPLIER_PARENT_ACCOUNT)
-            .accountType(AccountType.LIABILITY)  // Fournisseurs = Passif (dettes)
+            .accountType(AccountType.DETTES)  // Fournisseurs = Dettes (passif circulant)
             .isActive(true)
             .build();
 

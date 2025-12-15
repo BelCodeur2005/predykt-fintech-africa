@@ -39,6 +39,7 @@ public class PaymentCreateRequest {
     private PaymentMethod paymentMethod;
 
     // Détails selon le moyen
+    private Long bankAccountId;  // ID du compte bancaire si virement
     private String chequeNumber;
     private String mobileMoneyNumber;
     private String transactionReference;

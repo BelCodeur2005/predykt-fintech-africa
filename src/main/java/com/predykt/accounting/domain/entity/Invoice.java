@@ -350,7 +350,7 @@ public class Invoice extends BaseEntity {
      * Marque la facture comme impayée
      */
     public void markAsUnpaid() {
-        this.status = InvoiceStatus.UNPAID;
+        this.status = InvoiceStatus.PENDING;
         this.paymentDate = null;
     }
 

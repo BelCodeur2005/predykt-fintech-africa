@@ -165,7 +165,7 @@ public class VATDeclarationService {
     private BigDecimal calculateVATFromTaxCalculations(Company company, LocalDate startDate, LocalDate endDate, String accountNumber) {
         // Récupérer toutes les TaxCalculations de type VAT pour la période
         List<TaxCalculation> taxCalculations = taxCalculationRepository
-            .findByCompanyAndCalculationDateBetween(company, startDate, endDate);
+            .findByCompanyAndPeriod(company, startDate, endDate);
 
         BigDecimal total = BigDecimal.ZERO;
 

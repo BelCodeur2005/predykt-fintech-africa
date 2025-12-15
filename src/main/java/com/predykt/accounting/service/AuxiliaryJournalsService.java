@@ -165,7 +165,7 @@ public class AuxiliaryJournalsService {
         // Grouper par pièce comptable pour analyser les écritures complètes
         Map<String, List<GeneralLedger>> entriesByPiece = entries.stream()
             .collect(Collectors.groupingBy(
-                e -> e.getPieceNumber() != null ? e.getPieceNumber() : e.getReferenceNumber(),
+                e -> e.getReference() != null ? e.getReference() : "REF-" + e.getId(),
                 LinkedHashMap::new,
                 Collectors.toList()
             ));
@@ -183,16 +183,16 @@ public class AuxiliaryJournalsService {
 
                 JournalEntry journalEntry = JournalEntry.builder()
                     .entryDate(entry.getEntryDate())
-                    .pieceNumber(entry.getPieceNumber())
-                    .reference(entry.getReferenceNumber())
-                    .accountNumber(entry.getAccountNumber())
-                    .accountName(entry.getAccountName())
+                    .pieceNumber(entry.getReference())
+                    .reference(entry.getReference())
+                    .accountNumber(entry.getAccount().getAccountNumber())
+                    .accountName(entry.getAccount().getAccountName())
                     .description(entry.getDescription())
                     .debitAmount(entry.getDebitAmount())
                     .creditAmount(entry.getCreditAmount())
                     .balance(cumulativeBalance)
-                    .isReconciled(entry.getIsReconciled())
-                    .isLocked(entry.getIsLocked())
+                    .isReconciled(false)
+                    .isLocked(false)
                     .build();
 
                 // Enrichir avec données spécifiques selon journal
@@ -230,7 +230,7 @@ public class AuxiliaryJournalsService {
         String vatAccountPrefix = "VE".equals(journalCode) ? "4431" : "4452"; // Collectée ou Déductible
 
         Optional<GeneralLedger> vatEntry = pieceEntries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith(vatAccountPrefix))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith(vatAccountPrefix))
             .findFirst();
 
         if (vatEntry.isPresent()) {
@@ -283,12 +283,12 @@ public class AuxiliaryJournalsService {
     private JournalStatistics buildSalesStatistics(List<GeneralLedger> entries, List<JournalEntry> journalEntries) {
 
         BigDecimal totalSalesHT = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("7"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("7"))
             .map(GeneralLedger::getCreditAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalVATCollected = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("4431"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("4431"))
             .map(GeneralLedger::getCreditAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -319,12 +319,12 @@ public class AuxiliaryJournalsService {
     private JournalStatistics buildPurchasesStatistics(List<GeneralLedger> entries, List<JournalEntry> journalEntries) {
 
         BigDecimal totalPurchasesHT = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("6"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("6"))
             .map(GeneralLedger::getDebitAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalVATDeductible = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("4452"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("4452"))
             .map(GeneralLedger::getDebitAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -356,12 +356,12 @@ public class AuxiliaryJournalsService {
                                                   Company company, LocalDate startDate) {
 
         BigDecimal totalDebits = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("52"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("52"))
             .map(GeneralLedger::getDebitAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalCredits = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("52"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("52"))
             .map(GeneralLedger::getCreditAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -388,12 +388,12 @@ public class AuxiliaryJournalsService {
                                                   Company company, LocalDate startDate) {
 
         BigDecimal cashReceipts = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("57"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("57"))
             .map(GeneralLedger::getDebitAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal cashPayments = entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("57"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("57"))
             .map(GeneralLedger::getCreditAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -422,11 +422,11 @@ public class AuxiliaryJournalsService {
             .count();
 
         int provisions = (int) entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("691"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("691"))
             .count();
 
         int depreciations = (int) entries.stream()
-            .filter(e -> e.getAccountNumber() != null && e.getAccountNumber().startsWith("681"))
+            .filter(e -> e.getAccount().getAccountNumber() != null && e.getAccount().getAccountNumber().startsWith("681"))
             .count();
 
         return JournalStatistics.builder()

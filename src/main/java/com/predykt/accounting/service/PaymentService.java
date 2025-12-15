@@ -415,11 +415,6 @@ public class PaymentService {
             .reconciledBy(payment.getReconciledBy())
             .description(payment.getDescription())
             .notes(payment.getNotes())
-            .generalLedgerId(payment.getGeneralLedger() != null ? payment.getGeneralLedger().getId() : null)
-            .createdAt(payment.getCreatedAt())
-            .createdBy(payment.getCreatedBy())
-            .updatedAt(payment.getUpdatedAt())
-            .updatedBy(payment.getUpdatedBy())
             .build();
     }
 

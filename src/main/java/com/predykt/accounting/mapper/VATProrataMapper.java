@@ -76,7 +76,7 @@ public interface VATProrataMapper {
         if (rule == null) {
             return null;
         }
-        return rule.getRuleName() != null ? rule.getRuleName() : "Règle #" + rule.getId();
+        return rule.getName() != null ? rule.getName() : "Règle #" + rule.getId();
     }
 
     /**

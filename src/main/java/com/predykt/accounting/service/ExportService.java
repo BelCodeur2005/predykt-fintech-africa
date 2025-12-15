@@ -1452,9 +1452,9 @@ public class ExportService {
         // A. Ressources internes
         addTableRow(ressourcesTable, "A. Ressources internes", "");
         addTableRow(ressourcesTable, "  Capacité d'autofinancement (CAF)",
-            formatAmount(tafire.getRessourcesStables().getCaf().getCafTotal()));
+            formatAmount(tafire.getRessourcesStables().getCapaciteAutofinancement()));
         addTableRow(ressourcesTable, "  Cessions d'immobilisations",
-            formatAmount(tafire.getRessourcesStables().getCessionsImmobilisations()));
+            formatAmount(tafire.getRessourcesStables().getCessionsDImmobilisations()));
 
         // B. Ressources externes
         addTableRow(ressourcesTable, "B. Ressources externes", "");
@@ -1463,7 +1463,7 @@ public class ExportService {
         addTableRow(ressourcesTable, "  Emprunts à long terme",
             formatAmount(tafire.getRessourcesStables().getEmpruntsLongTerme()));
         addTableRow(ressourcesTable, "  Subventions d'investissement",
-            formatAmount(tafire.getRessourcesStables().getSubventionsInvestissement()));
+            formatAmount(tafire.getRessourcesStables().getSubventionsDInvestissement()));
 
         addTableTotal(ressourcesTable, "TOTAL RESSOURCES STABLES",
             formatAmount(tafire.getRessourcesStables().getTotalRessourcesStables()));
@@ -1482,11 +1482,11 @@ public class ExportService {
         addTableHeader(emploisTable, "Description", "Montant (" + tafire.getCurrency() + ")");
 
         addTableRow(emploisTable, "Acquisitions immobilisations incorporelles",
-            formatAmount(tafire.getEmploisStables().getAcquisitionsImmobilisationsIncorporelles()));
+            formatAmount(tafire.getEmploisStables().getImmobilisationsIncorporelles()));
         addTableRow(emploisTable, "Acquisitions immobilisations corporelles",
-            formatAmount(tafire.getEmploisStables().getAcquisitionsImmobilisationsCorporelles()));
+            formatAmount(tafire.getEmploisStables().getImmobilisationsCorporelles()));
         addTableRow(emploisTable, "Acquisitions immobilisations financières",
-            formatAmount(tafire.getEmploisStables().getAcquisitionsImmobilisationsFinancieres()));
+            formatAmount(tafire.getEmploisStables().getImmobilisationsFinancieres()));
         addTableRow(emploisTable, "Remboursements emprunts long terme",
             formatAmount(tafire.getEmploisStables().getRemboursementsEmpruntsLongTerme()));
         addTableRow(emploisTable, "Dividendes versés",
@@ -1523,9 +1523,9 @@ public class ExportService {
         addTableHeader(bfrTable, "Description", "Montant (" + tafire.getCurrency() + ")");
 
         addTableRow(bfrTable, "BFR exercice N",
-            formatAmount(tafire.getVariationBFR().getBfrExerciceN()));
+            formatAmount(tafire.getVariationBFR().getBfrFinExercice()));
         addTableRow(bfrTable, "BFR exercice N-1",
-            formatAmount(tafire.getVariationBFR().getBfrExerciceN1()));
+            formatAmount(tafire.getVariationBFR().getBfrDebutExercice()));
 
         addTableTotal(bfrTable, "VARIATION BFR (N - N-1)",
             formatAmount(tafire.getVariationBFR().getVariationBFR()));
@@ -1549,13 +1549,13 @@ public class ExportService {
             formatAmount(tafire.getVariationTresorerie().getVariationBFR()));
 
         addTableTotal(tresoTable, "VARIATION TRÉSORERIE (FRNG - BFR)",
-            formatAmount(tafire.getVariationTresorerie().getVariationTresorerie()));
+            formatAmount(tafire.getVariationTresorerie().getVariationTresorerieCalculee()));
 
         addTableRow(tresoTable, "", "");
         addTableRow(tresoTable, "Trésorerie début exercice",
-            formatAmount(tafire.getVariationTresorerie().getTresorerieDebut()));
+            formatAmount(tafire.getVariationTresorerie().getTresorerieDebutExercice()));
         addTableRow(tresoTable, "Trésorerie fin exercice",
-            formatAmount(tafire.getVariationTresorerie().getTresorerieFin()));
+            formatAmount(tafire.getVariationTresorerie().getTresorerieFinExercice()));
 
         document.add(tresoTable);
 
@@ -1651,16 +1651,16 @@ public class ExportService {
 
             addExcelRow(sheet, rowNum++, "A. Ressources internes", BigDecimal.ZERO, currencyStyle);
             addExcelRow(sheet, rowNum++, "  Capacité d'autofinancement (CAF)",
-                tafire.getRessourcesStables().getCaf().getCafTotal(), currencyStyle);
+                tafire.getRessourcesStables().getCapaciteAutofinancement(), currencyStyle);
             addExcelRow(sheet, rowNum++, "  Cessions d'immobilisations",
-                tafire.getRessourcesStables().getCessionsImmobilisations(), currencyStyle);
+                tafire.getRessourcesStables().getCessionsDImmobilisations(), currencyStyle);
             addExcelRow(sheet, rowNum++, "B. Ressources externes", BigDecimal.ZERO, currencyStyle);
             addExcelRow(sheet, rowNum++, "  Augmentation de capital",
                 tafire.getRessourcesStables().getAugmentationCapital(), currencyStyle);
             addExcelRow(sheet, rowNum++, "  Emprunts à long terme",
                 tafire.getRessourcesStables().getEmpruntsLongTerme(), currencyStyle);
             addExcelRow(sheet, rowNum++, "  Subventions d'investissement",
-                tafire.getRessourcesStables().getSubventionsInvestissement(), currencyStyle);
+                tafire.getRessourcesStables().getSubventionsDInvestissement(), currencyStyle);
             addExcelRow(sheet, rowNum++, "TOTAL RESSOURCES STABLES",
                 tafire.getRessourcesStables().getTotalRessourcesStables(), totalStyle);
 
@@ -1680,11 +1680,11 @@ public class ExportService {
             ecol2.setCellStyle(headerStyle);
 
             addExcelRow(sheet, rowNum++, "Acquisitions immobilisations incorporelles",
-                tafire.getEmploisStables().getAcquisitionsImmobilisationsIncorporelles(), currencyStyle);
+                tafire.getEmploisStables().getImmobilisationsIncorporelles(), currencyStyle);
             addExcelRow(sheet, rowNum++, "Acquisitions immobilisations corporelles",
-                tafire.getEmploisStables().getAcquisitionsImmobilisationsCorporelles(), currencyStyle);
+                tafire.getEmploisStables().getImmobilisationsCorporelles(), currencyStyle);
             addExcelRow(sheet, rowNum++, "Acquisitions immobilisations financières",
-                tafire.getEmploisStables().getAcquisitionsImmobilisationsFinancieres(), currencyStyle);
+                tafire.getEmploisStables().getImmobilisationsFinancieres(), currencyStyle);
             addExcelRow(sheet, rowNum++, "Remboursements emprunts long terme",
                 tafire.getEmploisStables().getRemboursementsEmpruntsLongTerme(), currencyStyle);
             addExcelRow(sheet, rowNum++, "Dividendes versés",
@@ -1710,9 +1710,9 @@ public class ExportService {
             bfrHeader.getCell(0).setCellStyle(headerStyle);
 
             addExcelRow(sheet, rowNum++, "BFR exercice N",
-                tafire.getVariationBFR().getBfrExerciceN(), currencyStyle);
+                tafire.getVariationBFR().getBfrFinExercice(), currencyStyle);
             addExcelRow(sheet, rowNum++, "BFR exercice N-1",
-                tafire.getVariationBFR().getBfrExerciceN1(), currencyStyle);
+                tafire.getVariationBFR().getBfrDebutExercice(), currencyStyle);
             addExcelRow(sheet, rowNum++, "VARIATION BFR (N - N-1)",
                 tafire.getVariationBFR().getVariationBFR(), totalStyle);
 
@@ -1728,13 +1728,13 @@ public class ExportService {
             addExcelRow(sheet, rowNum++, "Variation BFR",
                 tafire.getVariationTresorerie().getVariationBFR(), currencyStyle);
             addExcelRow(sheet, rowNum++, "VARIATION TRÉSORERIE (FRNG - BFR)",
-                tafire.getVariationTresorerie().getVariationTresorerie(), totalStyle);
+                tafire.getVariationTresorerie().getVariationTresorerieCalculee(), totalStyle);
 
             rowNum++; // Ligne vide
             addExcelRow(sheet, rowNum++, "Trésorerie début exercice",
-                tafire.getVariationTresorerie().getTresorerieDebut(), currencyStyle);
+                tafire.getVariationTresorerie().getTresorerieDebutExercice(), currencyStyle);
             addExcelRow(sheet, rowNum++, "Trésorerie fin exercice",
-                tafire.getVariationTresorerie().getTresorerieFin(), currencyStyle);
+                tafire.getVariationTresorerie().getTresorerieFinExercice(), currencyStyle);
 
             // Auto-size columns
             sheet.autoSizeColumn(0);

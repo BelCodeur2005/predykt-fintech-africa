@@ -82,14 +82,12 @@ public class MLMatchingService {
                 MatchFeatures features = featureExtractor.extract(bt, gl);
                 double[] featureArray = features.toArray();
 
-                // Pr\u00e9diction
-                int prediction = rf.predict(featureArray);  // 0 ou 1
-                double[] probabilities = rf.predict(featureArray, new double[2]);
+                // TODO: Migrer vers Smile 3.x API complète avec Tuple
+                // Pour l'instant, utiliser un score basé sur les features
+                double confidence = calculateConfidenceFromFeatures(features);
+                boolean isPredictedMatch = confidence >= 50.0;
 
-                // Confiance = probabilit\u00e9 de la classe 1 (match)
-                double confidence = probabilities[1] * 100.0;
-
-                scores.add(new CandidateScore(gl, features, confidence, prediction == 1));
+                scores.add(new CandidateScore(gl, features, confidence, isPredictedMatch));
             }
 
             // 3. Trouver le meilleur candidat (confiance max)
@@ -231,7 +229,7 @@ public class MLMatchingService {
                 .bankTransaction(result.getBankTransaction())
                 .glEntry(result.getGlEntry())
                 .predictedMatch(true)
-                .confidenceScore(result.getConfidenceScore())
+                .confidenceScore(BigDecimal.valueOf(result.getConfidenceScore()))
                 .features(result.getFeatures().toMap())
                 .predictionTimeMs(result.getPredictionTimeMs())
                 .predictedAt(LocalDateTime.now())
@@ -244,6 +242,27 @@ public class MLMatchingService {
             // Ne pas bloquer la pr\u00e9diction si log \u00e9choue
             this.log.error("Erreur log pr\u00e9diction: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Calcule un score de confiance basé sur les features (temporaire - en attendant migration Smile 3.x)
+     *
+     * @param features Les caractéristiques de correspondance
+     * @return Score de confiance (0-100)
+     */
+    private double calculateConfidenceFromFeatures(MatchFeatures features) {
+        double score = 0.0;
+
+        // Similarité du montant (50 points max)
+        score += features.getAmountSimilarity() * 50.0;
+
+        // Similarité de la date (30 points max)
+        score += features.getDateProximity() * 30.0;
+
+        // Similarité du texte (20 points max)
+        score += features.getDescriptionSimilarity() * 20.0;
+
+        return Math.min(100.0, Math.max(0.0, score));
     }
 
     /**
@@ -317,7 +336,7 @@ public class MLMatchingService {
         stats.put("accuracy", model.getAccuracy());
         stats.put("f1Score", model.getF1Score());
         stats.put("createdAt", model.getCreatedAt());
-        stats.put("trainingDataCount", model.getTrainingDataCount());
+        // stats.put("trainingDataCount", model.getTrainingDataCount()); // TODO: Ajouter ce champ à MLModel
 
         // Latence moyenne sur 7 derniers jours
         Double avgLatency = predictionLogRepository.calculateAverageLatency(

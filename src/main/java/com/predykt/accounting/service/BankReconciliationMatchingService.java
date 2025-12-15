@@ -451,7 +451,7 @@ public class BankReconciliationMatchingService {
             log.warn("⚠️ Trop de BT non matchées ({}), limitation à {} pour matching multiple",
                 unmatchedBT.size(), maxCandidates);
             unmatchedBT = unmatchedBT.stream()
-                .sorted(Comparator.comparing(bt -> bt.getAmount().abs()).reversed())
+                .sorted(Comparator.comparing((BankTransaction bt) -> bt.getAmount().abs()).reversed())
                 .limit(maxCandidates)
                 .collect(Collectors.toList());
         }
@@ -460,7 +460,7 @@ public class BankReconciliationMatchingService {
             log.warn("⚠️ Trop de GL non matchées ({}), limitation à {} pour matching multiple",
                 unmatchedGL.size(), maxCandidates);
             unmatchedGL = unmatchedGL.stream()
-                .sorted(Comparator.comparing(gl ->
+                .sorted(Comparator.comparing((GeneralLedger gl) ->
                     gl.getDebitAmount().subtract(gl.getCreditAmount()).abs()).reversed())
                 .limit(maxCandidates)
                 .collect(Collectors.toList());

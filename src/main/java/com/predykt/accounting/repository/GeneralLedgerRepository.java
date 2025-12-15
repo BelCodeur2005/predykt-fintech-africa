@@ -110,6 +110,30 @@ public interface GeneralLedgerRepository extends JpaRepository<GeneralLedger, Lo
         @Param("asOfDate") LocalDate asOfDate
     );
 
+    // Recherche par préfixe de compte et période (pour subledger)
+    @Query("SELECT g FROM GeneralLedger g WHERE g.company = :company " +
+           "AND g.account.accountNumber LIKE CONCAT(:accountPrefix, '%') " +
+           "AND g.entryDate BETWEEN :startDate AND :endDate " +
+           "ORDER BY g.account.accountNumber, g.entryDate")
+    List<GeneralLedger> findByCompanyAndAccountNumberStartingWithAndEntryDateBetween(
+        @Param("company") Company company,
+        @Param("accountPrefix") String accountPrefix,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
+    // Recherche par numéro de compte exact et période (pour subledger)
+    @Query("SELECT g FROM GeneralLedger g WHERE g.company = :company " +
+           "AND g.account.accountNumber = :accountNumber " +
+           "AND g.entryDate BETWEEN :startDate AND :endDate " +
+           "ORDER BY g.entryDate")
+    List<GeneralLedger> findByCompanyAndAccountNumberAndEntryDateBetween(
+        @Param("company") Company company,
+        @Param("accountNumber") String accountNumber,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
+    );
+
     // Compter les pièces commençant par un préfixe (pour génération numéro unique)
     Long countByCompanyAndPieceNumberStartingWith(Company company, String pieceNumberPrefix);
 }
