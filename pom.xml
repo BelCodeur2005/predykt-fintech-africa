@@ -167,6 +167,13 @@
             <version>3.6.1</version>
         </dependency>
 
+        <!-- Apache Commons Text pour NLP (Levenshtein, Jaro-Winkler) -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.11.0</version>
+        </dependency>
+
         <!-- ========== HTTP CLIENT (pour Python API) ========== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
