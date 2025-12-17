@@ -71,4 +71,33 @@ public interface BankTransactionRepository extends JpaRepository<BankTransaction
                                          @Param("endDate") LocalDate endDate);
     
     boolean existsByCompanyAndBankReference(Company company, String bankReference);
+
+    /**
+     * Compte la fréquence d'un montant similaire (±5%) dans l'historique
+     * Utilisé pour feature ML amount_frequency
+     */
+    @Query("SELECT COUNT(b) FROM BankTransaction b " +
+           "WHERE b.company = :company " +
+           "AND ABS(b.amount) BETWEEN (:amount * 0.95) AND (:amount * 1.05) " +
+           "AND b.transactionDate >= :since")
+    long countSimilarAmounts(
+        @Param("company") Company company,
+        @Param("amount") BigDecimal amount,
+        @Param("since") LocalDate since
+    );
+
+    /**
+     * Compte les transactions avec description similaire
+     * Utilise LOWER() pour comparaison insensible à la casse
+     * Utilisé pour feature ML description_frequency
+     */
+    @Query("SELECT COUNT(b) FROM BankTransaction b " +
+           "WHERE b.company = :company " +
+           "AND LOWER(b.description) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "AND b.transactionDate >= :since")
+    long countSimilarDescriptions(
+        @Param("company") Company company,
+        @Param("keyword") String keyword,
+        @Param("since") LocalDate since
+    );
 }

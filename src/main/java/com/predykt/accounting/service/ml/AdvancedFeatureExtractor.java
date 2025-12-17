@@ -6,6 +6,7 @@ import com.predykt.accounting.domain.entity.GeneralLedger;
 import com.predykt.accounting.dto.ml.AdvancedMatchFeatures;
 import com.predykt.accounting.repository.BankTransactionRepository;
 import com.predykt.accounting.repository.GeneralLedgerRepository;
+import com.predykt.accounting.repository.ml.MLPredictionLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.text.similarity.JaroWinklerSimilarity;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -40,6 +42,7 @@ public class AdvancedFeatureExtractor {
 
     private final BankTransactionRepository bankTransactionRepository;
     private final GeneralLedgerRepository generalLedgerRepository;
+    private final MLPredictionLogRepository mlPredictionLogRepository;
 
     // Instances NLP réutilisables
     private final LevenshteinDistance levenshteinDistance = new LevenshteinDistance();
@@ -305,34 +308,93 @@ public class AdvancedFeatureExtractor {
     // ==================== TIER 4: FEATURES HISTORIQUES ====================
 
     private Double calculateCustomerMatchRate(BankTransaction bt, Company company) {
-        // TODO: Implémenter calcul du taux de match historique pour ce client
-        // Nécessite requêtes sur l'historique des transactions
-        return 0.0;
+        try {
+            String thirdPartyName = bt.getThirdPartyName();
+            if (thirdPartyName == null || thirdPartyName.trim().isEmpty()) {
+                return 0.0;
+            }
+
+            Double matchRate = mlPredictionLogRepository.calculateCustomerMatchRate(company, thirdPartyName);
+            return matchRate != null ? matchRate : 0.0;
+        } catch (Exception e) {
+            log.warn("Erreur calcul customerMatchRate: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     private Double calculateAvgMatchingDelay(BankTransaction bt, Company company) {
-        // TODO: Implémenter calcul du délai moyen de matching
-        return 0.0;
+        try {
+            Double avgDelay = mlPredictionLogRepository.calculateAvgMatchingDelay(company);
+            return avgDelay != null ? avgDelay : 0.0;
+        } catch (Exception e) {
+            log.warn("Erreur calcul avgMatchingDelay: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     private Double calculateAccountFrequency(GeneralLedger gl, Company company) {
-        // TODO: Implémenter fréquence d'utilisation du compte
-        return 0.0;
+        try {
+            // Compter usages des 90 derniers jours
+            LocalDate since = LocalDate.now().minusDays(90);
+            long frequency = generalLedgerRepository.countAccountUsage(company, gl.getAccount(), since);
+            return (double) frequency;
+        } catch (Exception e) {
+            log.warn("Erreur calcul accountFrequency: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     private Double calculateAmountFrequency(BankTransaction bt, Company company) {
-        // TODO: Implémenter fréquence de ce montant dans l'historique
-        return 0.0;
+        try {
+            // Compter montants similaires (±5%) des 90 derniers jours
+            LocalDate since = LocalDate.now().minusDays(90);
+            BigDecimal amount = bt.getAmount().abs();
+            long frequency = bankTransactionRepository.countSimilarAmounts(company, amount, since);
+            return (double) frequency;
+        } catch (Exception e) {
+            log.warn("Erreur calcul amountFrequency: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     private Double calculateDescriptionFrequency(BankTransaction bt, Company company) {
-        // TODO: Implémenter fréquence de cette description
-        return 0.0;
+        try {
+            String description = bt.getDescription();
+            if (description == null || description.trim().isEmpty()) {
+                return 0.0;
+            }
+
+            // Extraire le mot-clé principal (premier mot significatif)
+            String[] words = normalize(description).split("\\s+");
+            String keyword = Arrays.stream(words)
+                .filter(word -> word.length() > 3)  // Mots > 3 chars
+                .findFirst()
+                .orElse("");
+
+            if (keyword.isEmpty()) {
+                return 0.0;
+            }
+
+            // Compter descriptions similaires des 90 derniers jours
+            LocalDate since = LocalDate.now().minusDays(90);
+            long frequency = bankTransactionRepository.countSimilarDescriptions(company, keyword, since);
+            return (double) frequency;
+        } catch (Exception e) {
+            log.warn("Erreur calcul descriptionFrequency: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     private Double calculateRecentMatchCount(BankTransaction bt, Company company) {
-        // TODO: Implémenter comptage des matches récents
-        return 0.0;
+        try {
+            // Compter matches des 30 derniers jours
+            LocalDateTime since = LocalDateTime.now().minusDays(30);
+            long matchCount = mlPredictionLogRepository.countRecentMatches(company, since);
+            return (double) matchCount;
+        } catch (Exception e) {
+            log.warn("Erreur calcul recentMatchCount: {}", e.getMessage());
+            return 0.0;
+        }
     }
 
     // ==================== UTILITAIRES NLP ====================

@@ -71,4 +71,42 @@ public interface MLPredictionLogRepository extends JpaRepository<MLPredictionLog
         @Param("company") Company company,
         @Param("since") LocalDateTime since
     );
+
+    /**
+     * Compte les matches récents (30 derniers jours)
+     */
+    @Query("SELECT COUNT(p) FROM MLPredictionLog p " +
+           "WHERE p.company = :company " +
+           "AND p.actualOutcome = true " +
+           "AND p.predictedAt >= :since")
+    long countRecentMatches(
+        @Param("company") Company company,
+        @Param("since") LocalDateTime since
+    );
+
+    /**
+     * Calcule le taux de match pour un client/fournisseur spécifique
+     * Basé sur le thirdPartyName de la transaction bancaire
+     */
+    @Query("SELECT CAST(SUM(CASE WHEN p.actualOutcome = true THEN 1 ELSE 0 END) AS double) / " +
+           "CAST(COUNT(p) AS double) FROM MLPredictionLog p " +
+           "WHERE p.company = :company " +
+           "AND p.bankTransaction.thirdPartyName = :thirdPartyName " +
+           "AND p.actualOutcome IS NOT NULL")
+    Double calculateCustomerMatchRate(
+        @Param("company") Company company,
+        @Param("thirdPartyName") String thirdPartyName
+    );
+
+    /**
+     * Calcule le délai moyen de matching (en jours)
+     * Différence moyenne entre date GL et date BT pour les matches réussis
+     */
+    @Query("SELECT AVG(ABS(CAST((p.glEntry.entryDate - p.bankTransaction.transactionDate) AS long))) " +
+           "FROM MLPredictionLog p " +
+           "WHERE p.company = :company " +
+           "AND p.actualOutcome = true")
+    Double calculateAvgMatchingDelay(
+        @Param("company") Company company
+    );
 }

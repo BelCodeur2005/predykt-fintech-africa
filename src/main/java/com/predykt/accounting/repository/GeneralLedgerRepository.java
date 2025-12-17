@@ -136,4 +136,18 @@ public interface GeneralLedgerRepository extends JpaRepository<GeneralLedger, Lo
 
     // Compter les pièces commençant par un préfixe (pour génération numéro unique)
     Long countByCompanyAndPieceNumberStartingWith(Company company, String pieceNumberPrefix);
+
+    /**
+     * Compte la fréquence d'utilisation d'un compte (90 derniers jours)
+     * Utilisé pour feature ML account_frequency
+     */
+    @Query("SELECT COUNT(g) FROM GeneralLedger g " +
+           "WHERE g.company = :company " +
+           "AND g.account = :account " +
+           "AND g.entryDate >= :since")
+    long countAccountUsage(
+        @Param("company") Company company,
+        @Param("account") ChartOfAccounts account,
+        @Param("since") LocalDate since
+    );
 }
