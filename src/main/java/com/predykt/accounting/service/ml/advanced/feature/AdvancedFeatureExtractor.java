@@ -1,4 +1,4 @@
-package com.predykt.accounting.service.ml;
+package com.predykt.accounting.service.ml.advanced.feature;
 
 import com.predykt.accounting.domain.entity.BankTransaction;
 import com.predykt.accounting.domain.entity.Company;

@@ -160,6 +160,14 @@
             <version>3.0.2</version>
         </dependency>
 
+        <!-- XGBoost: Gradient Boosting (Primary ML Algorithm) -->
+        <!-- Note: XGBoost Java bindings - version stable -->
+        <dependency>
+            <groupId>ml.dmlc</groupId>
+            <artifactId>xgboost4j_2.12</artifactId>
+            <version>1.7.6</version>
+        </dependency>
+
         <!-- Apache Commons Math pour statistiques -->
         <dependency>
             <groupId>org.apache.commons</groupId>
