@@ -4,6 +4,7 @@ import com.predykt.accounting.domain.entity.Company;
 import com.predykt.accounting.domain.entity.ml.MLModel;
 import com.predykt.accounting.domain.entity.ml.MLTrainingData;
 import com.predykt.accounting.domain.enums.MLModelStatus;
+import com.predykt.accounting.dto.ml.MatchFeatures;
 import com.predykt.accounting.repository.ml.MLModelRepository;
 import com.predykt.accounting.repository.ml.MLTrainingDataRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,16 +13,17 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import smile.classification.RandomForest;
+import smile.data.DataFrame;
 import smile.data.formula.Formula;
+import smile.data.vector.DoubleVector;
+import smile.data.vector.IntVector;
 import smile.validation.ClassificationMetrics;
 import smile.validation.CrossValidation;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.IntStream;
 
 /**
@@ -113,17 +115,17 @@ public class MLTrainingService {
             .status(MLModelStatus.TRAINED)
             .isActive(false)  // Pas encore d\u00e9ploy\u00e9
             .accuracy(BigDecimal.valueOf(metrics.accuracy).setScale(4, RoundingMode.HALF_UP))
-            .precision(BigDecimal.valueOf(metrics.precision).setScale(4, RoundingMode.HALF_UP))
-            .recall(BigDecimal.valueOf(metrics.recall).setScale(4, RoundingMode.HALF_UP))
+            .precisionScore(BigDecimal.valueOf(metrics.precision).setScale(4, RoundingMode.HALF_UP))
+            .recallScore(BigDecimal.valueOf(metrics.recall).setScale(4, RoundingMode.HALF_UP))
             .f1Score(BigDecimal.valueOf(metrics.f1Score).setScale(4, RoundingMode.HALF_UP))
-            .trainingDataCount(trainingData.size())
-            .trainingTimeMs(System.currentTimeMillis() - startTime)
+            .trainingSamplesCount(trainingData.size())
+            .trainingDurationSeconds((int)((System.currentTimeMillis() - startTime) / 1000))
             .build();
 
         MLModel saved = modelRepository.save(model);
 
-        log.info("Mod\u00e8le ML entra\u00een\u00e9 avec succ\u00e8s: {} (accuracy={:.2f}%, {}ms)",
-            saved.getModelVersion(), metrics.accuracy * 100, saved.getTrainingTimeMs());
+        log.info("Mod\u00e8le ML entra\u00een\u00e9 avec succ\u00e8s: {} (accuracy={:.2f}%, {}s)",
+            saved.getModelVersion(), metrics.accuracy * 100, saved.getTrainingDurationSeconds());
 
         return saved;
     }
@@ -233,18 +235,55 @@ public class MLTrainingService {
         log.info("Entra\u00eenement Random Forest: {} arbres, profondeur max {}, min split {}",
             NUM_TREES, MAX_DEPTH, MIN_SAMPLES_SPLIT);
 
-        return RandomForest.fit(
-            Formula.lhs("y"),
-            smile.data.DataFrame.of(dataset.X, "y", dataset.y),
-            NUM_TREES,
-            MAX_DEPTH,
-            MIN_SAMPLES_SPLIT,
-            MIN_SAMPLES_LEAF,
-            1.0,  // subsample ratio
+        // Smile 3.0.2 API: Créer DataFrame depuis double[][] et int[]
+        DataFrame df = createDataFrame(dataset);
+
+        // Créer formule (y est la variable cible)
+        Formula formula = Formula.lhs("y");
+
+        // Entraîner Random Forest (Smile 3.0.2 API)
+        // Signature: fit(Formula, DataFrame, ntrees, mtry, splitRule, maxDepth, maxNodes, nodeSize, subsample, classWeight)
+        RandomForest rf = RandomForest.fit(
+            formula,
+            df,
+            NUM_TREES,  // ntrees
             dataset.X[0].length,  // mtry (toutes les features)
-            smile.base.cart.SplitRule.GINI,
-            null  // class weight (balanced automatiquement)
+            smile.base.cart.SplitRule.GINI,  // splitRule
+            MAX_DEPTH,  // maxDepth
+            500,  // maxNodes
+            MIN_SAMPLES_LEAF,  // nodeSize
+            1.0,  // subsample
+            null  // classWeight
         );
+
+        // Stocker le DataFrame pour l'évaluation
+        dataset.dataFrame = df;
+
+        return rf;
+    }
+
+    /**
+     * Crée un DataFrame Smile depuis double[][] (features) et int[] (labels)
+     */
+    private DataFrame createDataFrame(TrainingDataset dataset) {
+        String[] featureNames = MatchFeatures.getFeatureNames();
+        List<smile.data.vector.BaseVector> vectors = new ArrayList<>();
+
+        // Transposer X: double[N][F] → F colonnes de N valeurs
+        for (int j = 0; j < dataset.X[0].length; j++) {
+            final int colIndex = j;
+            double[] columnValues = new double[dataset.X.length];
+            for (int i = 0; i < dataset.X.length; i++) {
+                columnValues[i] = dataset.X[i][colIndex];
+            }
+            vectors.add(DoubleVector.of(featureNames[j], columnValues));
+        }
+
+        // Ajouter colonne de labels
+        vectors.add(IntVector.of("y", dataset.y));
+
+        // Créer DataFrame (varargs, pas List)
+        return DataFrame.of(vectors.toArray(new smile.data.vector.BaseVector[0]));
     }
 
     /**
@@ -253,8 +292,9 @@ public class MLTrainingService {
     private TrainingMetrics evaluateModel(RandomForest rf, TrainingDataset dataset) {
         int[] predictions = new int[dataset.y.length];
 
-        for (int i = 0; i < dataset.X.length; i++) {
-            predictions[i] = rf.predict(dataset.X[i]);
+        // Utiliser le DataFrame pour prédictions (Smile 3.0.2 API)
+        for (int i = 0; i < dataset.dataFrame.size(); i++) {
+            predictions[i] = rf.predict(dataset.dataFrame.get(i));
         }
 
         // Calculer les m\u00e9triques
@@ -290,6 +330,7 @@ public class MLTrainingService {
     private static class TrainingDataset {
         double[][] X;  // Features
         int[] y;       // Labels
+        DataFrame dataFrame;  // DataFrame pour prédictions
 
         TrainingDataset(double[][] X, int[] y) {
             this.X = X;

@@ -136,10 +136,10 @@ public class MLFeatureExtractor {
      * 6. Vérifie si références identiques
      */
     private boolean referenceMatch(BankTransaction bt, GeneralLedger gl) {
-        if (bt.getReference() == null || gl.getReference() == null) {
+        if (bt.getBankReference() == null || gl.getReference() == null) {
             return false;
         }
-        return normalize(bt.getReference()).equals(normalize(gl.getReference()));
+        return normalize(bt.getBankReference()).equals(normalize(gl.getReference()));
     }
 
     /**

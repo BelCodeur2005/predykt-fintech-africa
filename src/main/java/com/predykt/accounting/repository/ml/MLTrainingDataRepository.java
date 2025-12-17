@@ -50,6 +50,13 @@ public interface MLTrainingDataRepository extends JpaRepository<MLTrainingData, 
     List<MLTrainingData> findUsableTrainingData(@Param("company") Company company);
 
     /**
+     * Compte les données d'entraînement utilisables (avec label)
+     */
+    @Query("SELECT COUNT(t) FROM MLTrainingData t WHERE t.company = :company " +
+           "AND t.wasAccepted IS NOT NULL")
+    long countUsableTrainingData(@Param("company") Company company);
+
+    /**
      * Compte les nouvelles données depuis un timestamp
      */
     @Query("SELECT COUNT(t) FROM MLTrainingData t WHERE t.company = :company " +

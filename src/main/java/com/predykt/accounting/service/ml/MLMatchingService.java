@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import smile.classification.RandomForest;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -231,7 +232,7 @@ public class MLMatchingService {
                 .predictedMatch(true)
                 .confidenceScore(BigDecimal.valueOf(result.getConfidenceScore()))
                 .features(result.getFeatures().toMap())
-                .predictionTimeMs(result.getPredictionTimeMs())
+                .predictionTimeMs(result.getPredictionTimeMs() != null ? result.getPredictionTimeMs().intValue() : null)
                 .predictedAt(LocalDateTime.now())
                 .build();
 
