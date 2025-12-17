@@ -85,7 +85,7 @@ Le script effectue **15 étapes automatisées** pour un déploiement production-
    - Répertoires: uploads, exports, imports, reports, audit, security
 
 4. **Configuration .env PRODUCTION**
-   - **SPRING_PROFILES_ACTIVE=cabinet,prod-tenant** (sécurité activée)
+   - **SPRING_PROFILES_ACTIVE=cabinet,prod** (sécurité activée avec profil standard Spring Boot)
    - **ENABLE_SECURITY=true** (SecurityConfig activé)
    - Logging niveau INFO (pas DEBUG)
    - PostgreSQL tuning production (2GB shared_buffers, 6GB cache)
@@ -129,8 +129,8 @@ Le script effectue **15 étapes automatisées** pour un déploiement production-
 11. **Build Maven production** (-Pprod profile)
 
 12. **Démarrage application PREDYKT**
-    - Sécurité activée
-    - Profil prod-tenant
+    - Sécurité activée (profil "prod")
+    - TenantSecurityConfig actif (authentification JWT requise)
     - JWT 512-bit validé
 
 13. **Attente application prête** (180s timeout)

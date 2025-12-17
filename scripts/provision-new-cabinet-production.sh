@@ -523,10 +523,10 @@ ADMIN_EMAIL=${ADMIN_EMAIL}
 # Mode Tenant & Environnement (PRODUCTION)
 # ─────────────────────────────────────────────────────────────────────────────
 PREDYKT_TENANT_MODE=CABINET
-SPRING_PROFILES_ACTIVE=cabinet,prod-tenant
+SPRING_PROFILES_ACTIVE=cabinet,prod
 ENVIRONMENT=production
 
-# ⚠️  SÉCURITÉ ACTIVÉE EN PRODUCTION (SecurityConfig activé)
+# ⚠️  SÉCURITÉ ACTIVÉE EN PRODUCTION (TenantSecurityConfig avec profil "prod")
 ENABLE_SECURITY=true
 
 # ─────────────────────────────────────────────────────────────────────────────

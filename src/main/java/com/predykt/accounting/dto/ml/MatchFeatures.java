@@ -204,4 +204,40 @@ public class MatchFeatures {
         // text_similarity déjà 0-1
         // Autres features déjà normalisées
     }
+
+    // ==================== Méthodes pour confidence calculation ====================
+
+    /**
+     * Calcule la similarité de montant (0-1)
+     * Plus le montant est proche, plus le score est élevé
+     */
+    public double getAmountSimilarity() {
+        if (amountRatio == null || amountRatio == 0.0) {
+            return 0.0;
+        }
+        // Si ratio proche de 1.0 → similarité élevée
+        // ratio=1.0 → similarity=1.0, ratio=0.5 ou 2.0 → similarity=0.5
+        double deviation = Math.abs(1.0 - amountRatio);
+        return Math.max(0.0, 1.0 - deviation);
+    }
+
+    /**
+     * Calcule la proximité de date (0-1)
+     * Plus les dates sont proches, plus le score est élevé
+     */
+    public double getDateProximity() {
+        if (dateDiffDays == null) {
+            return 0.0;
+        }
+        // 0 jours → 1.0, 30 jours → 0.0
+        return Math.max(0.0, 1.0 - (dateDiffDays / 30.0));
+    }
+
+    /**
+     * Calcule la similarité de description (0-1)
+     * Alias de textSimilarity pour API uniforme
+     */
+    public double getDescriptionSimilarity() {
+        return nvl(textSimilarity);
+    }
 }

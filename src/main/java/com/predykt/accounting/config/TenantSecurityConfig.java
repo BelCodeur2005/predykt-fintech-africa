@@ -28,22 +28,31 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Configuration de sécurité renforcée pour architecture Mono-Tenant
- * Chaque instance est dédiée à UN tenant, avec isolation physique complète
+ * Configuration de sécurité GLOBALE
+ * Activée par défaut pour TOUS les profils (dev, shared, dedicated, cabinet, prod)
+ *
+ * Cette configuration implémente:
+ * - JWT authentication complète
+ * - CSRF protection
+ * - Headers de sécurité renforcés (HSTS, CSP, XSS protection)
+ * - CORS configuré selon l'environnement
+ * - Rate limiting headers
+ *
+ * ⚠️  L'authentification est TOUJOURS activée, même en développement
+ * Pour désactiver la sécurité temporairement (tests uniquement), utiliser le profil "dev-no-auth"
  */
 @Configuration
 @EnableWebSecurity
-@Profile("prod-tenant")
 @RequiredArgsConstructor
 @Slf4j
 public class TenantSecurityConfig {
     
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    
-    @Value("${TENANT_ID}")
+
+    @Value("${TENANT_ID:dev-tenant}")
     private String tenantId;
-    
-    @Value("${TENANT_DOMAIN}")
+
+    @Value("${TENANT_DOMAIN:localhost}")
     private String tenantDomain;
     
     @Bean

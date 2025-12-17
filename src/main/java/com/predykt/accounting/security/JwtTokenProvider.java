@@ -48,7 +48,7 @@ public class JwtTokenProvider {
     public String generateToken(User user) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
-        
+
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("email", user.getEmail());
@@ -56,13 +56,20 @@ public class JwtTokenProvider {
         claims.put("companyName", user.getCompany().getName());
         claims.put("tenantId", tenantId);
         claims.put("tenantDomain", tenantDomain);
+
+        // MODE CABINET: Ajouter cabinetId si l'utilisateur appartient à un cabinet
+        if (user.getCabinet() != null) {
+            claims.put("cabinetId", user.getCabinet().getId());
+            claims.put("cabinetName", user.getCabinet().getName());
+        }
+
         claims.put("roles", user.getRoles().stream()
             .map(role -> role.getName())
             .collect(Collectors.toList()));
         claims.put("permissions", user.getAuthorities().stream()
             .map(auth -> auth.getAuthority())
             .collect(Collectors.toList()));
-        
+
         return Jwts.builder()
             .setClaims(claims)
             .setSubject(user.getEmail())
@@ -126,8 +133,21 @@ public class JwtTokenProvider {
             .build()
             .parseClaimsJws(token)
             .getBody();
-        
+
         return claims.get("tenantId", String.class);
+    }
+
+    /**
+     * Extrait le Cabinet ID du token (MODE CABINET)
+     */
+    public Long getCabinetIdFromToken(String token) {
+        Claims claims = Jwts.parserBuilder()
+            .setSigningKey(getSigningKey())
+            .build()
+            .parseClaimsJws(token)
+            .getBody();
+
+        return claims.get("cabinetId", Long.class);
     }
     
     /**

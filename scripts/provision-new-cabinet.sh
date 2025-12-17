@@ -152,9 +152,10 @@ CABINET_DOMAIN=${CABINET_DOMAIN}
 PREDYKT_TENANT_MODE=CABINET
 SPRING_PROFILES_ACTIVE=cabinet
 
-# ⚠️  DÉVELOPPEMENT: Sécurité désactivée (SecurityConfig avec permitAll)
-# Pour activer la sécurité, ajouter le profil "prod-tenant":
-#   SPRING_PROFILES_ACTIVE=cabinet,prod-tenant
+# 🔐 SÉCURITÉ ACTIVÉE par défaut (TenantSecurityConfig avec JWT)
+# L'authentification est TOUJOURS requise, même en développement
+# Pour désactiver temporairement (tests uniquement):
+#   SPRING_PROFILES_ACTIVE=cabinet,dev-no-auth
 ENVIRONMENT=development
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -540,8 +541,8 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     # Script SQL d'initialisation
     SQL_INIT=$(cat <<SQL
 -- Création du cabinet
-INSERT INTO cabinets (id, name, domain, created_at, updated_at)
-VALUES (1, '${CABINET_NAME}', '${CABINET_DOMAIN}', NOW(), NOW())
+INSERT INTO cabinets (id, name, domain, email, phone, address, plan, max_companies, max_users, is_active, created_at, updated_at)
+VALUES (1, '${CABINET_NAME}', '${CABINET_DOMAIN}', 'contact@${CABINET_DOMAIN}', '+237 XXX XXX XXX', 'Douala, Cameroun', 'STARTER', 50, 100, true, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- Création de 3 entreprises clientes
@@ -552,17 +553,17 @@ VALUES
   (12, 'Entreprise C SAS', 'contact@entreprise-c.cm', 'CM', 'XAF', 'OHADA', 1, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
--- Création d'un rôle ADMIN (si pas déjà existant)
+-- Création des rôles MODE CABINET (si pas déjà existants)
 INSERT INTO roles (id, name, description, is_system)
-VALUES (1, 'ROLE_ADMIN', 'Administrateur cabinet', true)
+VALUES (1, 'ROLE_ADMIN_CABINET', 'Administrateur cabinet - Accès complet tous dossiers', true)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO roles (id, name, description, is_system)
-VALUES (2, 'ROLE_ACCOUNTANT', 'Collaborateur comptable', true)
+VALUES (2, 'ROLE_COLLABORATOR', 'Collaborateur cabinet - Accès dossiers assignés', true)
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO roles (id, name, description, is_system)
-VALUES (3, 'ROLE_CLIENT', 'Client (accès lecture seule)', true)
+VALUES (3, 'ROLE_CLIENT', 'Client - Lecture seule son propre dossier', true)
 ON CONFLICT (name) DO NOTHING;
 
 -- Création d'un utilisateur admin
@@ -650,8 +651,17 @@ log_info "   Stop:        docker-compose -f docker-compose.cabinet-${CABINET_ID}
 log_info "   Restart:     docker-compose -f docker-compose.cabinet-${CABINET_ID}.yml restart"
 log_info "   Backup:      ./scripts/backup-tenant.sh cabinet ${CABINET_ID}"
 log_info ""
+log_info "🔐 Authentification:"
+log_info "   ⚠️  JWT REQUIS pour tous les endpoints (sauf /health, /auth/**, /swagger)"
+log_info "   1. Login: curl -X POST http://localhost:${APP_PORT}/api/v1/auth/login \\"
+log_info "             -H 'Content-Type: application/json' \\"
+log_info "             -d '{\"email\":\"admin@${CABINET_DOMAIN}\",\"password\":\"Admin@123\"}'"
+log_info "   2. Utiliser le token: -H 'Authorization: Bearer {accessToken}'"
+log_info ""
 log_info "🧪 Test de Connexion:"
-log_info "   curl http://localhost:${APP_PORT}/api/v1/health"
+log_info "   Health (sans auth): curl http://localhost:${APP_PORT}/api/v1/health"
+log_info "   Companies (avec auth requis): curl -H 'Authorization: Bearer TOKEN' \\"
+log_info "                                  http://localhost:${APP_PORT}/api/v1/companies"
 log_info ""
 log_info "📚 Documentation:"
 log_info "   Testing Guide: ./TESTING_MODE_CABINET.md"

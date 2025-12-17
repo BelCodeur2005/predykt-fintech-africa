@@ -165,7 +165,7 @@ echo ADMIN_EMAIL=%ADMIN_EMAIL%
 echo.
 echo # Mode Tenant ^& Environnement ^(PRODUCTION^)
 echo PREDYKT_TENANT_MODE=CABINET
-echo SPRING_PROFILES_ACTIVE=cabinet,prod-tenant
+echo SPRING_PROFILES_ACTIVE=cabinet,prod
 echo ENVIRONMENT=production
 echo ENABLE_SECURITY=true
 echo.

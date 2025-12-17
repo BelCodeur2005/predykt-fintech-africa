@@ -21,9 +21,25 @@ import java.util.Arrays;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
 
+/**
+ * Configuration de sécurité DÉSACTIVÉE (TESTS UNIQUEMENT)
+ * ⚠️ CETTE CONFIGURATION EST DÉSORMAIS DÉSACTIVÉE PAR DÉFAUT
+ *
+ * Cette configuration ne s'active QUE si vous lancez avec le profil "dev-no-auth":
+ *   SPRING_PROFILES_ACTIVE=cabinet,dev-no-auth
+ *
+ * Par défaut, l'authentification JWT est TOUJOURS activée via TenantSecurityConfig,
+ * même en développement. Cela permet de :
+ * - Tester le flow d'authentification complet en dev
+ * - Détecter les erreurs d'intégration JWT plus tôt
+ * - S'assurer que le code est production-ready
+ *
+ * N'utilisez cette configuration que pour des tests unitaires spécifiques
+ * qui nécessitent la désactivation de la sécurité.
+ */
 @Configuration
 @EnableWebSecurity
-@Profile("!prod-tenant")
+@Profile("dev-no-auth")
 public class SecurityConfig {
     
     @Bean

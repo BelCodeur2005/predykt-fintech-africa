@@ -85,7 +85,7 @@ Ce document liste tous les fichiers de configuration créés pour les 3 modes de
 ### Incohérences corrigées
 
 1. ✅ **init-db.sql**: Était un dossier → Converti en fichier SQL
-2. ✅ **Profils Spring**: `provision-new-tenant.sh` utilisait `prod-tenant` → Corrigé en `dedicated`
+2. ✅ **Profils Spring**: `provision-new-tenant.sh` utilisait `prod` → Corrigé en `dedicated`
 3. ✅ **Variables d'environnement**: Ajout de `PREDYKT_TENANT_MODE` et `PREDYKT_TENANT_ID` dans:
    - `docker-compose-tenant-template.yml`
    - `provision-new-tenant.sh`

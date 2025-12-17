@@ -40,7 +40,7 @@ public class MetricsPushService {
      */
     @Scheduled(cron = "0 0 * * * ?")
     public void pushDailyMetrics() {
-        if (!"prod-tenant".equals(activeProfile)) {
+        if (!"prod".equals(activeProfile)) {
             log.debug("⚠️ Mode développement - Push métriques désactivé");
             return;
         }

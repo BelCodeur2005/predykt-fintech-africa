@@ -30,9 +30,10 @@ public class CompanyController {
     private final CompanyMapper companyMapper;
     
     @PostMapping
-    @Profile("!prod-tenant")
+    @Profile("!prod")
     @Operation(summary = "Créer une entreprise",
-               description = "Crée une nouvelle entreprise et initialise son plan comptable OHADA")
+               description = "Crée une nouvelle entreprise et initialise son plan comptable OHADA. " +
+                           "⚠️ Endpoint désactivé en production (profil 'prod')")
     public ResponseEntity<ApiResponse<CompanyResponse>> createCompany(
             @Valid @RequestBody CompanyCreateRequest request) {
         

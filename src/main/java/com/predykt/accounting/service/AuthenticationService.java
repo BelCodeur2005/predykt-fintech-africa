@@ -1,5 +1,6 @@
 package com.predykt.accounting.service;
 
+import com.predykt.accounting.domain.entity.Cabinet;
 import com.predykt.accounting.domain.entity.Company;
 import com.predykt.accounting.domain.entity.Role;
 import com.predykt.accounting.domain.entity.User;
@@ -7,6 +8,7 @@ import com.predykt.accounting.dto.request.LoginRequest;
 import com.predykt.accounting.dto.request.RegisterRequest;
 import com.predykt.accounting.dto.response.AuthResponse;
 import com.predykt.accounting.exception.AccountingException;
+import com.predykt.accounting.repository.CabinetRepository;
 import com.predykt.accounting.repository.CompanyRepository;
 import com.predykt.accounting.repository.RoleRepository;
 import com.predykt.accounting.repository.UserRepository;
@@ -35,6 +37,7 @@ public class AuthenticationService {
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
     private final RoleRepository roleRepository;
+    private final CabinetRepository cabinetRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
@@ -107,25 +110,53 @@ public class AuthenticationService {
     
     /**
      * Inscription d'un nouvel utilisateur
+     * Supporte MODE SHARED/DEDICATED (companyId obligatoire) et MODE CABINET (cabinetId optionnel)
      */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         log.info("📝 Tentative d'inscription: {}", request.getEmail());
-        
+
+        // Validation: au moins companyId OU cabinetId doit être fourni
+        if (request.getCompanyId() == null && request.getCabinetId() == null) {
+            throw new AccountingException("CompanyId ou CabinetId doit être fourni");
+        }
+
         // Vérifier si l'email existe déjà
         if (userRepository.existsByEmail(request.getEmail())) {
             log.warn("⚠️ Email déjà utilisé: {}", request.getEmail());
             throw new AccountingException("Un compte avec cet email existe déjà");
         }
-        
-        // Récupérer la company
-        Company company = companyRepository.findById(request.getCompanyId())
-            .orElseThrow(() -> new AccountingException("Entreprise non trouvée"));
-        
-        // Récupérer le rôle par défaut
-        Role defaultRole = roleRepository.findByName("ROLE_ACCOUNTANT")
-            .orElseThrow(() -> new AccountingException("Rôle par défaut non trouvé"));
-        
+
+        // Récupérer la company (si fournie)
+        Company company = null;
+        if (request.getCompanyId() != null) {
+            company = companyRepository.findById(request.getCompanyId())
+                .orElseThrow(() -> new AccountingException("Entreprise non trouvée"));
+        }
+
+        // Récupérer le cabinet (si fourni)
+        Cabinet cabinet = null;
+        if (request.getCabinetId() != null) {
+            cabinet = cabinetRepository.findById(request.getCabinetId())
+                .orElseThrow(() -> new AccountingException("Cabinet non trouvé"));
+        }
+
+        // Déterminer le rôle par défaut selon le contexte
+        String defaultRoleName;
+        if (cabinet != null && company == null) {
+            // Admin cabinet sans dossier spécifique
+            defaultRoleName = "ROLE_ADMIN_CABINET";
+        } else if (cabinet != null && company != null) {
+            // Collaborateur affecté à un dossier
+            defaultRoleName = "ROLE_COLLABORATOR";
+        } else {
+            // MODE SHARED/DEDICATED
+            defaultRoleName = "ROLE_ACCOUNTANT";
+        }
+
+        Role defaultRole = roleRepository.findByName(defaultRoleName)
+            .orElseThrow(() -> new AccountingException("Rôle par défaut non trouvé: " + defaultRoleName));
+
         // Créer l'utilisateur
         User user = User.builder()
             .email(request.getEmail())
@@ -134,21 +165,25 @@ public class AuthenticationService {
             .lastName(request.getLastName())
             .phone(request.getPhone())
             .company(company)
+            .cabinet(cabinet)
             .isActive(true)
             .isEmailVerified(false) // À vérifier par email
             .roles(Set.of(defaultRole))
             .build();
-        
+
         user = userRepository.save(user);
-        
-        log.info("✅ Utilisateur créé: {} (ID: {})", user.getEmail(), user.getId());
-        
+
+        log.info("✅ Utilisateur créé: {} (ID: {}) - CompanyId: {} - CabinetId: {}",
+                user.getEmail(), user.getId(),
+                company != null ? company.getId() : "N/A",
+                cabinet != null ? cabinet.getId() : "N/A");
+
         // TODO: Envoyer email de vérification
-        
+
         // Générer les tokens JWT
         String accessToken = tokenProvider.generateToken(user);
         String refreshToken = tokenProvider.generateRefreshToken(user);
-        
+
         return AuthResponse.builder()
             .accessToken(accessToken)
             .refreshToken(refreshToken)

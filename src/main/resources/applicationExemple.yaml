@@ -141,16 +141,16 @@ predykt:
 
 # =========================================================================
 # BLOC DE SURCHARGE POUR LE PROFIL MONO-TENANT DÉDIÉ
-# (Activé par Docker Compose via SPRING_PROFILES_ACTIVE=prod-tenant)
+# (Activé par Docker Compose via SPRING_PROFILES_ACTIVE=prod)
 # =========================================================================
 # =========================================================================
-# CONFIGURATION PROD-TENANT (Architecture Mono-Tenant Dédiée)
+# CONFIGURATION prod (Architecture Mono-Tenant Dédiée)
 # =========================================================================
 ---
 spring:
   config:
     activate:
-      on-profile: prod-tenant
+      on-profile: prod
 
   # Désactiver auto-configuration DataSource (géré par TenantDatabaseConfig)
   autoconfigure:

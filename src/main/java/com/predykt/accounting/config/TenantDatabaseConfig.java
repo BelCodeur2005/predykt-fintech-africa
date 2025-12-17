@@ -11,14 +11,17 @@ import org.springframework.context.annotation.Profile;
 import javax.sql.DataSource;
 
 /**
- * Configuration de la base de données dédiée au Tenant (Mono-Tenant)
- * Chaque tenant a sa propre base de données isolée physiquement
- * 
- * Cette configuration est utilisée en mode "prod-tenant" où chaque instance
- * de l'application est dédiée à UN SEUL tenant.
+ * Configuration de la base de données PRODUCTION avec optimisations Hikari
+ *
+ * Cette configuration est activée avec le profil "prod" et fournit:
+ * - Connection pooling optimisé (HikariCP)
+ * - Prepared statements caching
+ * - SSL support (prefer mode)
+ * - Health checks et monitoring
+ * - Leak detection (60s)
  */
 @Configuration
-@Profile("prod-tenant")
+@Profile("prod")
 @Slf4j
 public class TenantDatabaseConfig {
     

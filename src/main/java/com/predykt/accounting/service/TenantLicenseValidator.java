@@ -41,8 +41,8 @@ public class TenantLicenseValidator {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void validateLicenseOnStartup() {
-        // Ne valider que si profil prod-tenant actif
-        if (!"prod-tenant".equals(activeProfile)) {
+        // Ne valider que si profil prod actif
+        if (!"prod".equals(activeProfile)) {
             log.info("⚠️ Mode développement - Validation licence désactivée");
             return;
         }
@@ -69,7 +69,7 @@ public class TenantLicenseValidator {
      */
     @Scheduled(cron = "0 0 2 * * ?")
     public void scheduledLicenseCheck() {
-        if (!"prod-tenant".equals(activeProfile)) {
+        if (!"prod".equals(activeProfile)) {
             return;
         }
         
@@ -151,7 +151,7 @@ public class TenantLicenseValidator {
      * Vérifie si le tenant peut créer une nouvelle transaction
      */
     public boolean canCreateTransaction() {
-        if (!"prod-tenant".equals(activeProfile)) {
+        if (!"prod".equals(activeProfile)) {
             return true; // Mode dev: pas de limite
         }
         
@@ -163,7 +163,7 @@ public class TenantLicenseValidator {
      * Vérifie si le tenant peut créer un nouvel utilisateur
      */
     public boolean canCreateUser(int currentUserCount) {
-        if (!"prod-tenant".equals(activeProfile)) {
+        if (!"prod".equals(activeProfile)) {
             return true;
         }
         
