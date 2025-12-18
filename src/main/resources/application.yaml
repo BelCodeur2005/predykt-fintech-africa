@@ -165,6 +165,27 @@ logging:
   pattern:
     console: "%d{HH:mm:ss.SSS} [🟡CABINET-${PREDYKT_TENANT_CABINET_ID}] [%thread] %-5level %logger{36} - %msg%n"
 
+---
+# ============================================
+# CONFIGURATION ML AVANCÉE (Système de Pointe)
+# ============================================
+predykt:
+  ml:
+    # Mode avancé activé par défaut (30 features, XGBoost/Stacking, SMOTE, Scaling)
+    use-advanced-mode: ${PREDYKT_ML_ADVANCED:true}
+
+    # Utiliser Stacking Ensemble (4 algorithms + meta-learner) au lieu de XGBoost seul
+    use-stacking: ${PREDYKT_ML_STACKING:false}
+
+    # Entraînement automatique
+    auto-training:
+      enabled: ${PREDYKT_ML_AUTO_TRAINING:true}
+
+    # Cron expressions pour les tâches automatiques
+    training-cron: ${PREDYKT_ML_TRAINING_CRON:0 0 3 * * ?}   # Tous les jours à 3h00
+    cleanup-cron: ${PREDYKT_ML_CLEANUP_CRON:0 0 4 * * SUN}  # Tous les dimanches à 4h00
+    monitoring-cron: ${PREDYKT_ML_MONITORING_CRON:0 0 9 * * MON}  # Tous les lundis à 9h00
+
 # ============================================
 # Configuration du matching automatique bancaire
 # ============================================

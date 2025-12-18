@@ -173,6 +173,13 @@ public class StackingEnsembleService {
     }
 
     /**
+     * Retourne le modèle XGBoost (base learner) pour sauvegarde
+     */
+    public Booster getXGBoostModel() {
+        return xgboostModel;
+    }
+
+    /**
      * Prédiction avec Stacking Ensemble
      *
      * @param features Feature vector (30 features)
