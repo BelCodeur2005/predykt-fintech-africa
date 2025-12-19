@@ -112,6 +112,12 @@ public class MLPredictionLog {
     @Builder.Default
     private LocalDateTime predictedAt = LocalDateTime.now();
 
+    /**
+     * Date de validation par l'utilisateur
+     */
+    @Column(name = "validated_at")
+    private LocalDateTime validatedAt;
+
     // ==================== Méthodes métier ====================
 
     /**

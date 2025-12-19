@@ -37,6 +37,8 @@ public class AutoRetrainingService {
 
     private final ModelMonitoringService monitoringService;
     private final ModelVersioningService versioningService;
+    private final com.predykt.accounting.repository.CompanyRepository companyRepository;
+    private final com.predykt.accounting.service.ml.MLTrainingService trainingService;
 
     // Tracking des re-entraînements
     private final Map<String, RetrainingStatus> retrainingHistory = new ConcurrentHashMap<>();
@@ -253,8 +255,119 @@ public class AutoRetrainingService {
     }
 
     /**
-     * Scheduled task: vérifie périodiquement si retraining nécessaire
-     * Exécuté tous les dimanches à 2h du matin
+     * Entraînement automatique quotidien (remplace MLTrainingScheduler)
+     * Cron: Tous les jours à 3h00 du matin
+     */
+    @Scheduled(cron = "${predykt.ml.training-cron:0 0 3 * * ?}")
+    public void scheduledTraining() {
+        log.info("🚀 [AutoRetraining] === Démarrage entraînement ML automatique ===");
+        long startTime = System.currentTimeMillis();
+
+        List<Company> companies = companyRepository.findAll();
+        int trained = 0;
+        int skipped = 0;
+
+        for (Company company : companies) {
+            try {
+                log.info("🔍 [AutoRetraining] Vérification company {}: {}", company.getId(), company.getName());
+
+                // Vérifier si besoin d'entraînement
+                if (!trainingService.hasEnoughTrainingData(company)) {
+                    log.info("⏭️  [AutoRetraining] Company {}: pas assez de données", company.getId());
+                    skipped++;
+                    continue;
+                }
+
+                // Entraîner et déployer si meilleur
+                boolean success = trainingService.trainAndDeployIfBetter(company);
+
+                if (success) {
+                    trained++;
+                    log.info("✅ [AutoRetraining] Company {}: entraînement terminé avec succès", company.getId());
+                } else {
+                    skipped++;
+                    log.warn("⚠️  [AutoRetraining] Company {}: entraînement échoué", company.getId());
+                }
+
+            } catch (Exception e) {
+                log.error("❌ [AutoRetraining] Erreur entraînement company {}: {}",
+                         company.getId(), e.getMessage(), e);
+                skipped++;
+            }
+        }
+
+        long duration = System.currentTimeMillis() - startTime;
+        log.info("🎯 [AutoRetraining] === Entraînement terminé: {} succès, {} ignorés, durée {}ms ===",
+                 trained, skipped, duration);
+    }
+
+    /**
+     * Nettoyage hebdomadaire des anciens modèles
+     * Cron: Tous les dimanches à 4h00
+     */
+    @Scheduled(cron = "${predykt.ml.cleanup-cron:0 0 4 * * SUN}")
+    public void scheduledCleanup() {
+        log.info("🧹 [AutoRetraining] === Démarrage nettoyage modèles ML ===");
+
+        List<Company> companies = companyRepository.findAll();
+        int cleaned = 0;
+
+        for (Company company : companies) {
+            try {
+                // Le cleanup des anciens modèles est géré par ModelVersioningService
+                // via l'archivage automatique lors de la sauvegarde de nouveaux modèles
+                log.debug("Company {}: Cleanup géré par ModelVersioningService", company.getId());
+                cleaned++;
+            } catch (Exception e) {
+                log.error("❌ [AutoRetraining] Erreur nettoyage company {}: {}",
+                         company.getId(), e.getMessage());
+            }
+        }
+
+        log.info("✅ [AutoRetraining] === Nettoyage terminé: {} entreprises ===", cleaned);
+    }
+
+    /**
+     * Monitoring hebdomadaire des performances ML
+     * Cron: Tous les lundis à 9h00
+     */
+    @Scheduled(cron = "${predykt.ml.monitoring-cron:0 0 9 * * MON}")
+    public void scheduledMonitoring() {
+        log.info("📊 [AutoRetraining] === Démarrage monitoring ML hebdomadaire ===");
+
+        List<Company> companies = companyRepository.findAll();
+
+        for (Company company : companies) {
+            try {
+                Map<String, Object> stats = trainingService.getTrainingStats(company);
+
+                log.info("📈 [AutoRetraining] Company {}: Stats={}", company.getId(), stats);
+
+                // Vérifier drift et performance
+                String modelType = "xgboost";
+                ModelMonitoringService.ModelStatistics modelStats =
+                    monitoringService.getModelStatistics(company.getId(), modelType);
+
+                ModelMonitoringService.DriftDetectionResult drift =
+                    monitoringService.detectDrift(modelStats);
+
+                if (drift.isDriftDetected()) {
+                    log.warn("⚠️  [AutoRetraining] Company {}: DRIFT DÉTECTÉ (score: {:.2f})",
+                             company.getId(), drift.getDriftScore());
+                }
+
+            } catch (Exception e) {
+                log.error("❌ [AutoRetraining] Erreur monitoring company {}: {}",
+                         company.getId(), e.getMessage());
+            }
+        }
+
+        log.info("✅ [AutoRetraining] === Monitoring terminé ===");
+    }
+
+    /**
+     * Vérification intelligente de retraining (triggers: drift, performance, data, time)
+     * Cron: Tous les dimanches à 2h00 du matin
      */
     @Scheduled(cron = "0 0 2 * * SUN")
     public void scheduledRetrainingCheck() {

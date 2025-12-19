@@ -1,286 +1,222 @@
 package com.predykt.accounting.service.ml.advanced.explainability;
 
-import com.predykt.accounting.service.ml.advanced.explainability.FeatureImportanceService.FeatureImportance;
-import com.predykt.accounting.service.ml.advanced.explainability.SHAPExplainerService.SHAPValues;
+import com.predykt.accounting.domain.entity.BankTransaction;
+import com.predykt.accounting.domain.entity.GeneralLedger;
+import com.predykt.accounting.dto.ml.FeatureImportance;
+import com.predykt.accounting.dto.ml.SHAPExplanation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
 
 /**
  * Service de génération de rapports d'explication ML
- * Architecture: advanced/explainability/
+ * Format conforme au document ML_BANK_RECONCILIATION_ADVANCED.md
  *
- * Génère des rapports lisibles pour:
- * - Utilisateurs métier (comptables, DAF)
- * - Data scientists (analyse détaillée)
- * - Auditeurs (traçabilité)
- *
- * Formats supportés:
- * - Texte (logs, console)
- * - HTML (rapports web)
- * - JSON (API, intégration)
+ * Génère des rapports lisibles au format EXACT spécifié:
+ * - Explication SHAP avec impact quantifié en %
+ * - Top N features avec impact détaillé
+ * - Format professionnel pour utilisateurs métier
  *
  * @author PREDYKT ML Team
+ * @version 2.0 - Format Document Compliance
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ExplanationReportService {
 
-    private final SHAPExplainerService shapService;
-    private final FeatureImportanceService importanceService;
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
     /**
-     * Génère un rapport d'explication pour une prédiction
+     * Génère un rapport d'explication SHAP au format EXACT du document
      *
-     * @param shapValues Valeurs SHAP de la prédiction
-     * @param bankTransactionDesc Description de la transaction bancaire
-     * @param generalLedgerDesc Description de l'écriture comptable
-     * @return Rapport textuel lisible
+     * Format attendu (ML_BANK_RECONCILIATION_ADVANCED.md lignes 1428-1477):
+     *
+     * 🔍 EXPLICATION (SHAP):
+     *
+     * Top 5 facteurs ayant influencé cette prédiction:
+     *
+     * 1. 💰 amount_difference = 0.00 FCFA
+     *    ➜ Impact: +28.5% (forte augmentation probabilité)
+     *
+     * 2. 📝 tfidf_similarity = 0.94
+     *    ➜ Impact: +22.3% (descriptions très similaires)
      */
-    public String generatePredictionReport(
-            SHAPValues shapValues,
-            String bankTransactionDesc,
-            String generalLedgerDesc) {
-
+    public String generateSHAPExplanationReport(
+            SHAPExplanation explanation,
+            BankTransaction bt,
+            GeneralLedger gl
+    ) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("╔══════════════════════════════════════════════════════════════╗\n");
-        sb.append("║     RAPPORT D'EXPLICATION - MATCHING BANCAIRE ML             ║\n");
-        sb.append("╚══════════════════════════════════════════════════════════════╝\n\n");
+        // En-tête du rapport complet
+        sb.append("╔════════════════════════════════════════════════════════════════╗\n");
+        sb.append("║         PRÉDICTION RAPPROCHEMENT BANCAIRE ML v2.0              ║\n");
+        sb.append("╚════════════════════════════════════════════════════════════════╝\n\n");
 
-        // Informations générales
-        sb.append("📅 Date: ").append(getCurrentTimestamp()).append("\n\n");
+        // Transaction Bancaire
+        sb.append("Transaction Bancaire:\n");
+        sb.append(String.format("  • Montant: %,d FCFA\n", bt.getAmount().longValue()));
+        sb.append(String.format("  • Date: %s\n", bt.getTransactionDate().format(DATE_FORMATTER)));
+        sb.append(String.format("  • Description: \"%s\"\n\n", bt.getDescription()));
 
-        // Candidats du match
-        sb.append("🏦 TRANSACTION BANCAIRE:\n");
-        sb.append("   ").append(truncate(bankTransactionDesc, 70)).append("\n\n");
+        // Écriture Comptable
+        sb.append("Écriture Comptable Candidate:\n");
+        sb.append(String.format("  • Montant: %,d FCFA\n",
+                gl.getDebitAmount().subtract(gl.getCreditAmount()).abs().longValue()));
+        sb.append(String.format("  • Date: %s\n", gl.getEntryDate().format(DATE_FORMATTER)));
+        sb.append(String.format("  • Compte: %s - %s\n",
+                gl.getAccount().getAccountNumber(),
+                gl.getAccount().getAccountName()));
+        sb.append(String.format("  • Description: \"%s\"\n\n", gl.getDescription()));
 
-        sb.append("📒 ÉCRITURE COMPTABLE:\n");
-        sb.append("   ").append(truncate(generalLedgerDesc, 70)).append("\n\n");
+        // Résultat Prédiction
+        sb.append("┌────────────────────────────────────────────────────────────────┐\n");
+        sb.append("│                    RÉSULTAT PRÉDICTION                         │\n");
+        sb.append("├────────────────────────────────────────────────────────────────┤\n");
 
-        // Prédiction
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append("🎯 PRÉDICTION DU MODÈLE\n");
-        sb.append("═══════════════════════════════════════════════════════════════\n");
+        boolean isMatch = explanation.getProbability() >= 0.5;
+        sb.append(String.format("│  %s MATCH DÉTECTÉ                                              │\n",
+                isMatch ? "✅" : "❌"));
+        sb.append(String.format("│  Confiance: %.1f%%                                              │\n",
+                explanation.getConfidence()));
+        sb.append(String.format("│  Algorithme: %s                         │\n",
+                padRight(explanation.getModelVersion(), 32)));
+        sb.append("└────────────────────────────────────────────────────────────────┘\n\n");
 
-        double probability = shapValues.getPrediction();
-        String decision = probability >= 0.5 ? "MATCH ✅" : "NO MATCH ❌";
-        String confidence = getConfidenceLevel(probability);
-
-        sb.append(String.format("Décision:     %s\n", decision));
-        sb.append(String.format("Probabilité:  %.2f%%\n", probability * 100));
-        sb.append(String.format("Confiance:    %s\n\n", confidence));
-
-        // Explication SHAP
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append("🔍 EXPLICATION DE LA PRÉDICTION (SHAP)\n");
-        sb.append("═══════════════════════════════════════════════════════════════\n\n");
-
-        sb.append(String.format("Baseline (moyenne): %.2f%%\n",
-                                shapValues.getBaseValue() * 100));
-        sb.append(String.format("Impact total:       %.2f%%\n\n",
-                                (probability - shapValues.getBaseValue()) * 100));
-
-        // Facteurs positifs
-        sb.append("🔼 FACTEURS FAVORISANT LE MATCH:\n");
-        if (shapValues.getTopPositive().isEmpty()) {
-            sb.append("   Aucun facteur positif significatif\n\n");
-        } else {
-            shapValues.getTopPositive().forEach(c -> {
-                String featureLabel = getFeatureLabel(c.getFeatureName());
-                String impact = formatImpact(c.getContribution());
-                sb.append(String.format("   • %s: %s\n", featureLabel, impact));
-            });
-            sb.append("\n");
-        }
-
-        // Facteurs négatifs
-        sb.append("🔽 FACTEURS DÉFAVORISANT LE MATCH:\n");
-        if (shapValues.getTopNegative().isEmpty()) {
-            sb.append("   Aucun facteur négatif significatif\n\n");
-        } else {
-            shapValues.getTopNegative().forEach(c -> {
-                String featureLabel = getFeatureLabel(c.getFeatureName());
-                String impact = formatImpact(c.getContribution());
-                sb.append(String.format("   • %s: %s\n", featureLabel, impact));
-            });
-            sb.append("\n");
-        }
-
-        // Recommandation
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append("💡 RECOMMANDATION\n");
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append(generateRecommendation(probability)).append("\n\n");
-
-        sb.append("╚══════════════════════════════════════════════════════════════╝\n");
-
-        return sb.toString();
-    }
-
-    /**
-     * Génère un rapport d'importance globale des features
-     */
-    public String generateFeatureImportanceReport(FeatureImportance importance) {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("╔══════════════════════════════════════════════════════════════╗\n");
-        sb.append("║     IMPORTANCE DES FEATURES - MODÈLE ML                      ║\n");
-        sb.append("╚══════════════════════════════════════════════════════════════╝\n\n");
-
-        sb.append("📅 Date: ").append(getCurrentTimestamp()).append("\n");
-        sb.append("🤖 Modèle: ").append(importance.getModelType()).append("\n");
-        sb.append("📊 Type: ").append(importance.getImportanceType()).append("\n\n");
-
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append("🏆 TOP 15 FEATURES LES PLUS IMPORTANTES\n");
-        sb.append("═══════════════════════════════════════════════════════════════\n\n");
-
-        sb.append(String.format("%-4s %-40s %-10s %s\n",
-                                "Rang", "Feature", "Score", "Bar"));
-        sb.append("-".repeat(70) + "\n");
+        // EXPLICATION SHAP (FORMAT EXACT DU DOCUMENT)
+        sb.append("🔍 EXPLICATION (SHAP):\n\n");
+        sb.append("Top 5 facteurs ayant influencé cette prédiction:\n\n");
 
         int rank = 1;
-        for (var fs : importance.getRankedFeatures().subList(0,
-                Math.min(15, importance.getRankedFeatures().size()))) {
+        for (FeatureImportance feat : explanation.getTopFeatures().subList(0, Math.min(5, explanation.getTopFeatures().size()))) {
+            // Emoji selon le tier
+            String emoji = getEmojiForTier(feat.getTier());
 
-            String featureLabel = getFeatureLabel(fs.getFeatureName());
-            String scoreStr = String.format("%.4f", fs.getScore());
-            String bar = generateBar(fs.getScore(), 20);
+            // Nom lisible et valeur
+            String featureLine = String.format("%d. %s %s = %.2f%s",
+                    rank,
+                    emoji,
+                    feat.getFeatureDisplayName(),
+                    feat.getFeatureValue(),
+                    feat.getUnit());
 
-            sb.append(String.format("%-4d %-40s %-10s %s\n",
-                                    rank++, featureLabel, scoreStr, bar));
+            sb.append(featureLine).append("\n");
+
+            // Impact avec direction
+            String direction = feat.isPositiveImpact() ? "augmentation" : "diminution";
+            String description = getFeatureImpactDescription(feat.getFeatureName(), feat.getFeatureValue());
+
+            sb.append(String.format("   ➜ Impact: %s%.1f%% (%s)\n\n",
+                    feat.isPositiveImpact() ? "+" : "",
+                    feat.getImpactPercent(),
+                    description));
+
+            rank++;
         }
 
-        sb.append("\n");
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append("📌 INTERPRÉTATION\n");
-        sb.append("═══════════════════════════════════════════════════════════════\n");
-        sb.append(generateFeatureInterpretation(importance)).append("\n");
-
-        sb.append("╚══════════════════════════════════════════════════════════════╝\n");
+        // Action recommandée
+        sb.append("Action recommandée: ");
+        if (explanation.getConfidence() >= 95.0) {
+            sb.append("✅ Valider automatiquement ce match\n");
+        } else if (explanation.getConfidence() >= 80.0) {
+            sb.append("✅ Valider ce match (révision légère recommandée)\n");
+        } else if (explanation.getConfidence() >= 60.0) {
+            sb.append("⚠️ Révision manuelle requise\n");
+        } else {
+            sb.append("❌ Rejeter ce match\n");
+        }
 
         return sb.toString();
     }
 
     /**
-     * Obtient le timestamp actuel formaté
+     * Génère une explication courte pour l'API
      */
-    private String getCurrentTimestamp() {
-        return LocalDateTime.now().format(
-            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
-        );
-    }
-
-    /**
-     * Obtient un label lisible pour une feature
-     */
-    private String getFeatureLabel(String featureName) {
-        Map<String, String> labels = Map.ofEntries(
-            Map.entry("amount_difference", "Différence de montant"),
-            Map.entry("amount_ratio", "Ratio de montant"),
-            Map.entry("date_diff_business_days", "Écart de dates (jours ouvrés)"),
-            Map.entry("tfidf_cosine_similarity", "Similarité textuelle (TF-IDF)"),
-            Map.entry("levenshtein_distance", "Distance Levenshtein"),
-            Map.entry("jaro_winkler_similarity", "Similarité Jaro-Winkler"),
-            Map.entry("customer_match_rate", "Taux de match historique"),
-            Map.entry("account_frequency", "Fréquence du compte"),
-            Map.entry("amount_frequency", "Fréquence du montant"),
-            Map.entry("is_weekend", "Est un weekend"),
-            Map.entry("is_month_end", "Est fin de mois")
-        );
-
-        return labels.getOrDefault(featureName, featureName);
-    }
-
-    /**
-     * Formate l'impact SHAP en texte lisible
-     */
-    private String formatImpact(double contribution) {
-        double absContribution = Math.abs(contribution);
-        String sign = contribution > 0 ? "+" : "-";
-
-        if (absContribution > 0.1) {
-            return String.format("%s%.3f (Impact FORT)", sign, absContribution);
-        } else if (absContribution > 0.05) {
-            return String.format("%s%.3f (Impact MOYEN)", sign, absContribution);
-        } else {
-            return String.format("%s%.3f (Impact FAIBLE)", sign, absContribution);
+    public String generateShortExplanation(SHAPExplanation explanation) {
+        if (explanation.getTopFeatures().isEmpty()) {
+            return "🤖 Prédiction ML basée sur modèle " + explanation.getModelVersion();
         }
-    }
 
-    /**
-     * Obtient le niveau de confiance
-     */
-    private String getConfidenceLevel(double probability) {
-        double absProb = Math.abs(probability - 0.5);
+        StringBuilder sb = new StringBuilder("🔍 EXPLICATION (SHAP):\n\n");
+        sb.append("Top 5 facteurs:\n\n");
 
-        if (absProb > 0.4) return "TRÈS ÉLEVÉE 🟢";
-        else if (absProb > 0.3) return "ÉLEVÉE 🟢";
-        else if (absProb > 0.2) return "MOYENNE 🟡";
-        else if (absProb > 0.1) return "FAIBLE 🟠";
-        else return "TRÈS FAIBLE 🔴";
-    }
+        int rank = 1;
+        for (FeatureImportance feat : explanation.getTopFeatures().subList(0, Math.min(5, explanation.getTopFeatures().size()))) {
+            sb.append(String.format("%d. %s %s = %.2f%s\n",
+                    rank,
+                    getEmojiForTier(feat.getTier()),
+                    feat.getFeatureDisplayName(),
+                    feat.getFeatureValue(),
+                    feat.getUnit()));
 
-    /**
-     * Génère une recommandation basée sur la probabilité
-     */
-    private String generateRecommendation(double probability) {
-        if (probability >= 0.85) {
-            return "✅ Match hautement probable. Recommandation: ACCEPTER automatiquement.";
-        } else if (probability >= 0.7) {
-            return "✅ Match probable. Recommandation: ACCEPTER avec vérification légère.";
-        } else if (probability >= 0.5) {
-            return "⚠️ Match incertain. Recommandation: RÉVISION MANUELLE requise.";
-        } else if (probability >= 0.3) {
-            return "❌ Pas de match probable. Recommandation: REJETER avec vérification.";
-        } else {
-            return "❌ Pas de match. Recommandation: REJETER automatiquement.";
+            sb.append(String.format("   ➜ Impact: %s%.1f%%\n\n",
+                    feat.isPositiveImpact() ? "+" : "",
+                    feat.getImpactPercent()));
+
+            rank++;
         }
-    }
-
-    /**
-     * Génère une barre de progression ASCII
-     */
-    private String generateBar(double score, int maxLength) {
-        int filledLength = (int) (score * maxLength);
-        int emptyLength = maxLength - filledLength;
-
-        return "█".repeat(filledLength) + "░".repeat(emptyLength);
-    }
-
-    /**
-     * Génère une interprétation des features importantes
-     */
-    private String generateFeatureInterpretation(FeatureImportance importance) {
-        StringBuilder sb = new StringBuilder();
-
-        var topFeature = importance.getRankedFeatures().get(0);
-        String topLabel = getFeatureLabel(topFeature.getFeatureName());
-
-        sb.append(String.format(
-            "La feature la plus importante est '%s' (score: %.4f).\n",
-            topLabel, topFeature.getScore()
-        ));
-
-        sb.append("Cela signifie que cette caractéristique a le plus d'influence\n");
-        sb.append("sur les décisions du modèle de matching bancaire.");
 
         return sb.toString();
     }
 
     /**
-     * Tronque un texte à une longueur maximale
+     * Retourne l'emoji approprié pour un tier
      */
-    private String truncate(String text, int maxLength) {
-        if (text == null) return "";
-        return text.length() > maxLength
-            ? text.substring(0, maxLength - 3) + "..."
-            : text;
+    private String getEmojiForTier(String tier) {
+        if (tier == null) return "🔹";
+
+        return switch (tier) {
+            case "TIER 1 - MONTANTS" -> "💰";
+            case "TIER 2 - SIMILARITÉ TEXTUELLE" -> "📝";
+            case "TIER 3 - TEMPORALITÉ" -> "📅";
+            case "TIER 4 - HISTORIQUE" -> "📊";
+            default -> "🔹";
+        };
+    }
+
+    /**
+     * Génère une description textuelle de l'impact d'une feature
+     */
+    private String getFeatureImpactDescription(String featureName, double value) {
+        return switch (featureName) {
+            case "amount_difference" -> value < 100 ? "montants quasi-identiques" :
+                    value < 1000 ? "montants très proches" : "différence de montants";
+
+            case "tfidf_cosine_similarity" -> value > 0.9 ? "descriptions très similaires" :
+                    value > 0.7 ? "descriptions similaires" : "descriptions partiellement similaires";
+
+            case "date_diff_business_days", "date_diff_calendar_days" ->
+                    value <= 1 ? "dates très proches" :
+                            value <= 3 ? "dates proches" : "écart de dates notable";
+
+            case "customer_match_rate" -> value > 0.9 ? "tiers avec excellent historique" :
+                    value > 0.7 ? "tiers avec bon historique" : "tiers avec historique moyen";
+
+            case "jaro_winkler_similarity" -> value > 0.9 ? "noms très similaires" :
+                    value > 0.7 ? "noms similaires" : "noms partiellement similaires";
+
+            case "recent_match_count" -> value > 5 ? "matches récents fréquents" :
+                    value > 0 ? "matches récents détectés" : "pas de matches récents";
+
+            case "is_weekend" -> value == 1.0 ? "transaction weekend" : "transaction semaine";
+
+            case "is_month_end" -> value == 1.0 ? "transaction fin de mois" : "transaction milieu mois";
+
+            default -> value > 0.5 ? "forte augmentation probabilité" : "forte diminution probabilité";
+        };
+    }
+
+    /**
+     * Pad string à droite
+     */
+    private String padRight(String text, int length) {
+        if (text.length() >= length) {
+            return text.substring(0, length);
+        }
+        return text + " ".repeat(length - text.length());
     }
 }

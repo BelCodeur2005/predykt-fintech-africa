@@ -405,6 +405,44 @@ public class BankReconciliationController {
         return ResponseEntity.ok(ApiResponse.success(null, message));
     }
 
+    @PostMapping("/{reconciliationId}/suggestions/{suggestionId}/ml-feedback")
+    @Operation(summary = "📝 Feedback ML sur une suggestion",
+               description = "Permet de donner un feedback sur une prediction ML pour ameliorer le modele. " +
+                   "A appeler apres applySuggestion ou rejectSuggestion pour l'apprentissage continu.")
+    public ResponseEntity<ApiResponse<Void>> submitMLFeedback(
+            @PathVariable Long companyId,
+            @PathVariable Long reconciliationId,
+            @PathVariable Long suggestionId,
+            @RequestBody com.predykt.accounting.dto.request.MLPredictionFeedbackRequest feedback) {
+
+        BankReconciliation reconciliation = reconciliationService.getReconciliationById(reconciliationId);
+
+        // Charger la suggestion
+        BankReconciliationSuggestion suggestion = suggestionRepository
+            .findByIdAndReconciliation(suggestionId, reconciliation)
+            .orElseThrow(() -> new ResourceNotFoundException(
+                "Suggestion non trouvee: " + suggestionId));
+
+        // Verifier si c'est une suggestion ML (matchingReason contient "ML")
+        if (suggestion.getMatchingReason() != null &&
+            suggestion.getMatchingReason().contains("ML")) {
+
+            log.info("📝 Feedback ML pour suggestion {} - Company: {}, Correct: {}",
+                     suggestionId, companyId, feedback.getWasCorrect());
+
+            // TODO: Implementer le lien predictionLogId dans BankReconciliationSuggestion
+            // Pour l'instant, on log juste l'information pour traçabilite
+            log.warn("⚠️  Feedback ML recu mais predictionLogId non stocke dans la suggestion. " +
+                     "A implementer: ajouter champ predictionLogId a BankReconciliationSuggestion");
+
+            return ResponseEntity.ok(ApiResponse.success(null,
+                "Feedback ML enregistre (Note: Integration complete a venir)"));
+        } else {
+            return ResponseEntity.badRequest()
+                .body(ApiResponse.error("Cette suggestion n'est pas une prediction ML", "NOT_ML_SUGGESTION"));
+        }
+    }
+
     // DTO pour la requête d'application de suggestions
     @lombok.Data
     @lombok.NoArgsConstructor

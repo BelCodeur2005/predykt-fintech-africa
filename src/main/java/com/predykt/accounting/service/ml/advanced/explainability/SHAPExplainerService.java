@@ -1,237 +1,308 @@
 package com.predykt.accounting.service.ml.advanced.explainability;
 
-import lombok.Data;
+import com.predykt.accounting.dto.ml.AdvancedMatchFeatures;
+import com.predykt.accounting.dto.ml.FeatureImportance;
+import com.predykt.accounting.dto.ml.SHAPExplanation;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ml.dmlc.xgboost4j.java.Booster;
+import ml.dmlc.xgboost4j.java.DMatrix;
+import ml.dmlc.xgboost4j.java.XGBoostError;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Service d'explication SHAP (SHapley Additive exPlanations)
- * Architecture: advanced/explainability/
+ * Service d'explicabilité ML avec SHAP (SHapley Additive exPlanations)
  *
- * SHAP fournit des explications locales et globales:
- * - Local: Contribution de chaque feature pour UNE prédiction
- * - Global: Importance moyenne des features sur TOUTES les prédictions
+ * SHAP quantifie la contribution de chaque feature à la prédiction finale.
+ * Basé sur la théorie des jeux de Shapley.
  *
- * Méthode: TreeSHAP (adapté pour tree-based models)
- * - XGBoost, GradientBoosting, RandomForest, AdaBoost
+ * Implémentation:
+ * - TreeSHAP pour XGBoost (via predictContrib)
+ * - Calcul de l'impact de chaque feature en %
+ * - Génération de rapports lisibles
  *
- * Note: Implémentation simplifiée car librairies SHAP Java limitées.
- * Pour production, utiliser SHAP Python via API.
+ * Références:
+ * - Lundberg & Lee (2017): "A Unified Approach to Interpreting Model Predictions"
+ * - XGBoost predict_contrib documentation
  *
  * @author PREDYKT ML Team
+ * @version 2.0 - Full SHAP Implementation
  */
-@Slf4j
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class SHAPExplainerService {
 
     /**
-     * Calcule les valeurs SHAP pour une prédiction (explication locale)
+     * Calcule les SHAP values pour expliquer une prédiction
      *
-     * Cette implémentation est simplifiée. Pour une vraie implémentation SHAP,
-     * il faudrait utiliser la librairie Python SHAP via API REST.
+     * Utilise XGBoost's predict with contrib=True pour obtenir les contributions
+     * de chaque feature (approximation de TreeSHAP)
      *
-     * @param features Feature vector (30 features)
-     * @param featureNames Noms des features
-     * @param featureImportance Importance globale des features (du modèle)
-     * @param prediction Prédiction du modèle
-     * @param baseValue Valeur de base (moyenne des prédictions)
-     * @return SHAPValues avec contribution de chaque feature
+     * @param booster Modèle XGBoost
+     * @param features Features de la prédiction (30 features)
+     * @param advancedFeatures Features avancées (pour noms et valeurs)
+     * @param probability Probabilité prédite (0-1)
+     * @param modelVersion Version du modèle
+     * @return Explication SHAP complète
      */
-    public SHAPValues explainPrediction(
+    public SHAPExplanation explainPrediction(
+            Booster booster,
             double[] features,
-            String[] featureNames,
-            Map<String, Double> featureImportance,
-            double prediction,
-            double baseValue) {
+            AdvancedMatchFeatures advancedFeatures,
+            double probability,
+            String modelVersion
+    ) {
+        long startTime = System.currentTimeMillis();
 
-        log.debug("🔍 [SHAP] Explaining prediction: {:.4f} (base: {:.4f})",
-                 prediction, baseValue);
+        try {
+            // 1. Calculer les contributions via XGBoost
+            float[] flatFeatures = toFloatArray(features);
+            DMatrix dmatrix = new DMatrix(flatFeatures, 1, features.length);
 
-        Map<String, Double> shapValues = new HashMap<>();
+            // XGBoost predict_contrib retourne [feature_contributions..., bias]
+            // Le dernier élément est le bias (base_value)
+            float[][] contribs = booster.predictContrib(dmatrix, 0);
 
-        // Calcul simplifié des SHAP values
-        // Approximation: contribution = (feature_value - mean) * importance
-        double totalImportance = featureImportance.values().stream()
-            .mapToDouble(Double::doubleValue)
-            .sum();
-
-        for (int i = 0; i < featureNames.length; i++) {
-            String featureName = featureNames[i];
-            double featureValue = features[i];
-            double importance = featureImportance.getOrDefault(featureName, 0.0);
-
-            // Contribution SHAP approximée
-            double shapValue = (featureValue * importance / totalImportance)
-                             * (prediction - baseValue);
-
-            shapValues.put(featureName, shapValue);
-        }
-
-        // Tri par importance absolue
-        List<FeatureContribution> contributions = shapValues.entrySet().stream()
-            .map(e -> new FeatureContribution(e.getKey(), e.getValue()))
-            .sorted((a, b) -> Double.compare(
-                Math.abs(b.contribution), Math.abs(a.contribution)
-            ))
-            .collect(Collectors.toList());
-
-        SHAPValues result = new SHAPValues();
-        result.setShapValues(shapValues);
-        result.setContributions(contributions);
-        result.setBaseValue(baseValue);
-        result.setPrediction(prediction);
-        result.setTopPositive(getTopContributions(contributions, true, 5));
-        result.setTopNegative(getTopContributions(contributions, false, 5));
-
-        logExplanation(result);
-
-        return result;
-    }
-
-    /**
-     * Calcule les SHAP values globales (importance moyenne)
-     *
-     * @param allShapValues Liste de toutes les SHAP values calculées
-     * @return GlobalSHAPValues avec importance moyenne
-     */
-    public GlobalSHAPValues calculateGlobalImportance(List<SHAPValues> allShapValues) {
-        log.info("📊 [SHAP] Calculating global importance from {} predictions",
-                 allShapValues.size());
-
-        Map<String, List<Double>> featureContributions = new HashMap<>();
-
-        // Collecter toutes les contributions par feature
-        for (SHAPValues shapValue : allShapValues) {
-            for (Map.Entry<String, Double> entry : shapValue.shapValues.entrySet()) {
-                featureContributions
-                    .computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
-                    .add(Math.abs(entry.getValue()));
+            if (contribs == null || contribs.length == 0) {
+                log.warn("XGBoost predictContrib returned null or empty");
+                return createFallbackExplanation(features, advancedFeatures, probability, modelVersion);
             }
+
+            float[] contributions = contribs[0];
+
+            // 2. Extraire base value (dernier élément)
+            double baseValue = contributions[contributions.length - 1];
+
+            // 3. Extraire SHAP values (tous sauf le dernier)
+            double[] shapValues = new double[features.length];
+            for (int i = 0; i < features.length; i++) {
+                shapValues[i] = contributions[i];
+            }
+
+            // 4. Créer les FeatureImportance objects
+            List<FeatureImportance> allImportances = createFeatureImportances(
+                    shapValues,
+                    advancedFeatures
+            );
+
+            // 5. Trier par impact absolu et prendre le top 10
+            List<FeatureImportance> topFeatures = allImportances.stream()
+                    .sorted((a, b) -> Double.compare(
+                            Math.abs(b.getShapValue()),
+                            Math.abs(a.getShapValue())
+                    ))
+                    .limit(10)
+                    .collect(Collectors.toList());
+
+            // 6. Grouper par tier
+            Map<String, List<FeatureImportance>> featuresByTier = allImportances.stream()
+                    .collect(Collectors.groupingBy(FeatureImportance::getTier));
+
+            // 7. Calculer la prédiction (devrait être proche de probability après sigmoid)
+            double sumShap = Arrays.stream(shapValues).sum();
+            double rawPrediction = baseValue + sumShap;
+
+            long computationTime = System.currentTimeMillis() - startTime;
+
+            SHAPExplanation explanation = SHAPExplanation.builder()
+                    .shapValues(shapValues)
+                    .topFeatures(topFeatures)
+                    .baseValue(baseValue)
+                    .prediction(rawPrediction)
+                    .probability(probability)
+                    .confidence(probability * 100.0)
+                    .modelVersion(modelVersion)
+                    .totalFeatures(features.length)
+                    .featuresByTier(featuresByTier)
+                    .computationTimeMs(computationTime)
+                    .build();
+
+            log.debug("SHAP explanation computed in {}ms - Top feature: {} (impact: {:.2f}%)",
+                    computationTime,
+                    topFeatures.isEmpty() ? "N/A" : topFeatures.get(0).getFeatureName(),
+                    topFeatures.isEmpty() ? 0.0 : topFeatures.get(0).getImpactPercent());
+
+            return explanation;
+
+        } catch (XGBoostError e) {
+            log.error("Erreur calcul SHAP values: {}", e.getMessage(), e);
+            return createFallbackExplanation(features, advancedFeatures, probability, modelVersion);
+        } catch (Exception e) {
+            log.error("Erreur inattendue calcul SHAP: {}", e.getMessage(), e);
+            return createFallbackExplanation(features, advancedFeatures, probability, modelVersion);
         }
-
-        // Calculer importance moyenne (mean absolute SHAP value)
-        Map<String, Double> meanAbsShap = new HashMap<>();
-        for (Map.Entry<String, List<Double>> entry : featureContributions.entrySet()) {
-            double mean = entry.getValue().stream()
-                .mapToDouble(Double::doubleValue)
-                .average()
-                .orElse(0.0);
-            meanAbsShap.put(entry.getKey(), mean);
-        }
-
-        // Tri par importance
-        List<FeatureContribution> globalContributions = meanAbsShap.entrySet().stream()
-            .map(e -> new FeatureContribution(e.getKey(), e.getValue()))
-            .sorted((a, b) -> Double.compare(
-                Math.abs(b.contribution), Math.abs(a.contribution)
-            ))
-            .collect(Collectors.toList());
-
-        GlobalSHAPValues result = new GlobalSHAPValues();
-        result.setMeanAbsShap(meanAbsShap);
-        result.setGlobalImportance(globalContributions);
-        result.setSampleCount(allShapValues.size());
-
-        logGlobalImportance(result);
-
-        return result;
     }
 
     /**
-     * Obtient les top N contributions (positives ou négatives)
+     * Crée les FeatureImportance objects à partir des SHAP values
      */
-    private List<FeatureContribution> getTopContributions(
-            List<FeatureContribution> contributions,
-            boolean positive,
-            int topN) {
+    private List<FeatureImportance> createFeatureImportances(
+            double[] shapValues,
+            AdvancedMatchFeatures advancedFeatures
+    ) {
+        List<FeatureImportance> importances = new ArrayList<>();
 
-        return contributions.stream()
-            .filter(c -> positive ? c.contribution > 0 : c.contribution < 0)
-            .limit(topN)
-            .collect(Collectors.toList());
-    }
+        // Noms des features (même ordre que toArray())
+        String[] featureNames = AdvancedMatchFeatures.getFeatureNames();
+        double[] featureValues = advancedFeatures.toArray();
 
-    /**
-     * Affiche l'explication dans les logs
-     */
-    private void logExplanation(SHAPValues shapValues) {
-        log.debug("🔍 [SHAP] Explanation:");
-        log.debug("  - Prediction: {:.4f}, Base: {:.4f}",
-                 shapValues.prediction, shapValues.baseValue);
-        log.debug("  - Top 5 positive contributions:");
-        shapValues.topPositive.forEach(c ->
-            log.debug("    + {}: {:.4f}", c.featureName, c.contribution)
-        );
-        log.debug("  - Top 5 negative contributions:");
-        shapValues.topNegative.forEach(c ->
-            log.debug("    - {}: {:.4f}", c.featureName, c.contribution)
-        );
-    }
+        for (int i = 0; i < shapValues.length && i < featureNames.length; i++) {
+            String featureName = featureNames[i];
+            double shapValue = shapValues[i];
+            double featureValue = featureValues[i];
 
-    /**
-     * Affiche l'importance globale dans les logs
-     */
-    private void logGlobalImportance(GlobalSHAPValues global) {
-        log.info("📊 [SHAP] Global feature importance (top 10):");
-        global.globalImportance.stream()
-            .limit(10)
-            .forEach(c -> log.info("  - {}: {:.4f}", c.featureName, c.contribution));
-    }
+            // Déterminer le tier
+            String tier = determineTier(i);
 
-    /**
-     * Génère un résumé textuel de l'explication
-     */
-    public String generateExplanationText(SHAPValues shapValues) {
-        StringBuilder sb = new StringBuilder();
+            // Nom lisible et unité
+            FeatureDisplayInfo displayInfo = getFeatureDisplayInfo(featureName, featureValue);
 
-        sb.append(String.format("Prédiction: %.2f%% de probabilité de match\n",
-                                shapValues.prediction * 100));
-        sb.append(String.format("Baseline: %.2f%%\n\n",
-                                shapValues.baseValue * 100));
+            FeatureImportance importance = FeatureImportance.builder()
+                    .featureName(featureName)
+                    .featureDisplayName(displayInfo.displayName)
+                    .featureValue(featureValue)
+                    .shapValue(shapValue)
+                    .impactPercent(Math.abs(shapValue) * 100.0)
+                    .direction(shapValue >= 0 ? "INCREASE" : "DECREASE")
+                    .tier(tier)
+                    .description(generateDescription(featureName, featureValue, shapValue))
+                    .unit(displayInfo.unit)
+                    .build();
 
-        sb.append("🔼 Facteurs favorisant le match:\n");
-        for (FeatureContribution c : shapValues.topPositive) {
-            sb.append(String.format("  • %s: +%.4f\n", c.featureName, c.contribution));
+            importances.add(importance);
         }
 
-        sb.append("\n🔽 Facteurs défavorisant le match:\n");
-        for (FeatureContribution c : shapValues.topNegative) {
-            sb.append(String.format("  • %s: %.4f\n", c.featureName, c.contribution));
+        return importances;
+    }
+
+    /**
+     * Détermine le tier d'une feature (1-4) basé sur son index
+     */
+    private String determineTier(int index) {
+        if (index < 10) return "TIER 1 - MONTANTS";
+        else if (index < 18) return "TIER 2 - SIMILARITÉ TEXTUELLE";
+        else if (index < 24) return "TIER 3 - TEMPORALITÉ";
+        else return "TIER 4 - HISTORIQUE";
+    }
+
+    /**
+     * Retourne les informations d'affichage pour une feature
+     */
+    private FeatureDisplayInfo getFeatureDisplayInfo(String featureName, double value) {
+        return switch (featureName) {
+            case "amount_difference" -> new FeatureDisplayInfo("Différence de montant", " XAF");
+            case "amount_ratio" -> new FeatureDisplayInfo("Ratio montants", "");
+            case "date_diff_business_days" -> new FeatureDisplayInfo("Jours ouvrés d'écart", " jours");
+            case "date_diff_calendar_days" -> new FeatureDisplayInfo("Jours calendaires d'écart", " jours");
+            case "amount_log_ratio" -> new FeatureDisplayInfo("Log ratio montants", "");
+            case "amount_percentile_diff" -> new FeatureDisplayInfo("Différence percentile", "");
+            case "day_of_month_diff" -> new FeatureDisplayInfo("Écart jour du mois", "");
+            case "week_of_year_diff" -> new FeatureDisplayInfo("Écart semaine", "");
+            case "month_diff" -> new FeatureDisplayInfo("Écart mois", "");
+            case "quarter_diff" -> new FeatureDisplayInfo("Écart trimestre", "");
+
+            case "tfidf_cosine_similarity" -> new FeatureDisplayInfo("TF-IDF Cosine", "%");
+            case "levenshtein_distance" -> new FeatureDisplayInfo("Distance Levenshtein", "");
+            case "jaro_winkler_similarity" -> new FeatureDisplayInfo("Jaro-Winkler", "%");
+            case "word2vec_similarity" -> new FeatureDisplayInfo("Word2Vec", "%");
+            case "bigram_overlap" -> new FeatureDisplayInfo("Bigram overlap", "%");
+            case "trigram_overlap" -> new FeatureDisplayInfo("Trigram overlap", "%");
+            case "fuzzy_match_score" -> new FeatureDisplayInfo("Fuzzy match", "%");
+            case "entity_name_match" -> new FeatureDisplayInfo("Entity match", "%");
+
+            case "is_weekend" -> new FeatureDisplayInfo("Weekend", "");
+            case "is_month_end" -> new FeatureDisplayInfo("Fin de mois", "");
+            case "is_month_start" -> new FeatureDisplayInfo("Début de mois", "");
+            case "is_quarter_end" -> new FeatureDisplayInfo("Fin de trimestre", "");
+            case "day_of_week" -> new FeatureDisplayInfo("Jour de la semaine", "");
+            case "quarter" -> new FeatureDisplayInfo("Trimestre", "");
+
+            case "customer_match_rate" -> new FeatureDisplayInfo("Taux match client", "%");
+            case "avg_matching_delay" -> new FeatureDisplayInfo("Délai moyen match", " jours");
+            case "account_frequency" -> new FeatureDisplayInfo("Fréquence compte", "");
+            case "amount_frequency" -> new FeatureDisplayInfo("Fréquence montant", "");
+            case "description_frequency" -> new FeatureDisplayInfo("Fréquence description", "");
+            case "recent_match_count" -> new FeatureDisplayInfo("Matches récents", "");
+
+            default -> new FeatureDisplayInfo(featureName, "");
+        };
+    }
+
+    /**
+     * Génère une description de l'impact
+     */
+    private String generateDescription(String featureName, double value, double shapValue) {
+        String direction = shapValue > 0 ? "augmente" : "diminue";
+        double impactPercent = Math.abs(shapValue) * 100.0;
+
+        return String.format("%s la probabilité de %.1f%%", direction, impactPercent);
+    }
+
+    /**
+     * Convertit double[] en float[]
+     */
+    private float[] toFloatArray(double[] doubles) {
+        float[] floats = new float[doubles.length];
+        for (int i = 0; i < doubles.length; i++) {
+            floats[i] = (float) doubles[i];
         }
-
-        return sb.toString();
+        return floats;
     }
 
-    // ========== CLASSES DE DONNÉES ==========
+    /**
+     * Crée une explication fallback si SHAP échoue
+     */
+    private SHAPExplanation createFallbackExplanation(
+            double[] features,
+            AdvancedMatchFeatures advancedFeatures,
+            double probability,
+            String modelVersion
+    ) {
+        log.warn("Utilisation explication fallback (SHAP non disponible)");
 
-    @Data
-    public static class SHAPValues {
-        private Map<String, Double> shapValues;
-        private List<FeatureContribution> contributions;
-        private double baseValue;
-        private double prediction;
-        private List<FeatureContribution> topPositive;
-        private List<FeatureContribution> topNegative;
+        // Créer des importances factices basées sur des heuristiques
+        double[] shapValues = new double[features.length];
+        Arrays.fill(shapValues, 0.0);
+
+        // Donner de l'importance aux features clés
+        shapValues[0] = advancedFeatures.getAmountDifference() != null &&
+                advancedFeatures.getAmountDifference() < 1000 ? 0.25 : 0.0;
+        shapValues[10] = advancedFeatures.getTfidfCosineSimilarity() != null ?
+                advancedFeatures.getTfidfCosineSimilarity() * 0.20 : 0.0;
+
+        List<FeatureImportance> allImportances = createFeatureImportances(shapValues, advancedFeatures);
+        List<FeatureImportance> topFeatures = allImportances.stream()
+                .sorted((a, b) -> Double.compare(Math.abs(b.getShapValue()), Math.abs(a.getShapValue())))
+                .limit(10)
+                .collect(Collectors.toList());
+
+        return SHAPExplanation.builder()
+                .shapValues(shapValues)
+                .topFeatures(topFeatures)
+                .baseValue(0.0)
+                .prediction(probability)
+                .probability(probability)
+                .confidence(probability * 100.0)
+                .modelVersion(modelVersion + " (fallback)")
+                .totalFeatures(features.length)
+                .computationTimeMs(0L)
+                .build();
     }
 
-    @Data
-    public static class GlobalSHAPValues {
-        private Map<String, Double> meanAbsShap;
-        private List<FeatureContribution> globalImportance;
-        private int sampleCount;
-    }
+    /**
+     * Classe interne pour stocker les infos d'affichage
+     */
+    private static class FeatureDisplayInfo {
+        String displayName;
+        String unit;
 
-    @Data
-    public static class FeatureContribution {
-        private final String featureName;
-        private final double contribution;
-
-        public FeatureContribution(String featureName, double contribution) {
-            this.featureName = featureName;
-            this.contribution = contribution;
+        FeatureDisplayInfo(String displayName, String unit) {
+            this.displayName = displayName;
+            this.unit = unit;
         }
     }
 }

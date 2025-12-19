@@ -1,0 +1,74 @@
+{
+	"info": {
+		"_postman_id": "predykt-api-v1-2025",
+		"name": "PREDYKT Accounting API - Complete Collection",
+		"description": "Collection complète de l'API PREDYKT pour la comptabilité OHADA.\n\n**Fonctionnalités:**\n- Gestion comptable OHADA\n- Rapprochement bancaire avec ML\n- Gestion fiscale (TVA, IR, CFU, CFE, TCA, CNI)\n- Facturation et paiements\n- Immobilisations\n- Budgets\n- Rapports financiers\n- Mode Cabinet\n- Exports PDF/Excel\n\n**Version:** 1.0.0\n**Base URL:** http://localhost:8080/api/v1\n**Auth:** JWT Bearer Token",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-refresh token si expiré",
+					"const tokenExpiry = pm.environment.get('token_expiry');",
+					"const now = new Date().getTime();",
+					"",
+					"if (tokenExpiry && now > tokenExpiry) {",
+					"    console.log('Token expiré, rafraîchissement automatique...');",
+					"    // Logique de refresh token ici",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Tests globaux pour toutes les requêtes",
+					"pm.test('Status code is 2xx or 3xx', function () {",
+					"    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204, 301, 302, 304]);",
+					"});",
+					"",
+					"pm.test('Response time is acceptable', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});",
+					"",
+					"// Si réponse JSON, vérifier la structure ApiResponse",
+					"if (pm.response.headers.get('Content-Type')?.includes('application/json')) {",
+					"    pm.test('Response has ApiResponse structure', function () {",
+					"        const jsonData = pm.response.json();",
+					"        pm.expect(jsonData).to.have.property('success');",
+					"        pm.expect(jsonData).to.have.property('message');",
+					"        pm.expect(jsonData).to.have.property('timestamp');",
+					"    });",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "company_id",
+			"value": "1",
+			"type": "string"
+		}
+	]
+}

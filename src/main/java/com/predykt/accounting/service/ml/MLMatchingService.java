@@ -7,14 +7,20 @@ import com.predykt.accounting.domain.entity.ml.MLModel;
 import com.predykt.accounting.domain.entity.ml.MLPredictionLog;
 import com.predykt.accounting.dto.ml.MLPredictionResult;
 import com.predykt.accounting.dto.ml.MatchFeatures;
+import com.predykt.accounting.dto.ml.AdvancedMatchFeatures;
 import com.predykt.accounting.repository.ml.MLModelRepository;
 import com.predykt.accounting.repository.ml.MLPredictionLogRepository;
+import com.predykt.accounting.service.ml.advanced.algorithms.XGBoostTrainingService;
+import com.predykt.accounting.service.ml.advanced.feature.FeatureEngineeringPipeline;
+import com.predykt.accounting.service.ml.advanced.explainability.SHAPExplainerService;
+import com.predykt.accounting.dto.ml.SHAPExplanation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ml.dmlc.xgboost4j.java.Booster;
+import ml.dmlc.xgboost4j.java.XGBoostError;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import smile.classification.RandomForest;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,35 +28,42 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Service ML pour matching bancaire
- * Utilise Random Forest pour pr\u00e9dire les matches BT ↔ GL
+ * Service ML pour matching bancaire (Systeme Avance Uniquement)
+ *
+ * Systeme ML de pointe avec:
+ * - 30 features avancees (FeatureEngineeringPipeline)
+ * - XGBoost ou Stacking Ensemble
+ * - Predictions probabilistes precises
+ * - Target accuracy: 95-97%
  *
  * Pipeline:
- * 1. Extract features (MLFeatureExtractor)
- * 2. Load active model
- * 3. Predict with Random Forest
+ * 1. Extract 30 advanced features
+ * 2. Load active XGBoost/Stacking model
+ * 3. Predict with ML model
  * 4. Log prediction
  * 5. Return MLPredictionResult
  *
  * @author PREDYKT ML Team
+ * @version 3.0 - Advanced Only
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MLMatchingService {
 
-    private final MLFeatureExtractor featureExtractor;
+    private final FeatureEngineeringPipeline featurePipeline;
+    private final XGBoostTrainingService xgboostService;
+    private final SHAPExplainerService shapExplainerService;
     private final MLModelRepository modelRepository;
     private final MLPredictionLogRepository predictionLogRepository;
-    private final MLModelStorageService modelStorageService;
 
     /**
-     * Pr\u00e9dit le meilleur match GL pour une BankTransaction
+     * Predit le meilleur match GL pour une BankTransaction
      *
      * @param bt Transaction bancaire
      * @param glCandidates Candidats GL possibles
      * @param company Entreprise
-     * @return Meilleur match pr\u00e9dit avec score de confiance
+     * @return Meilleur match predit avec score de confiance
      */
     @Transactional
     public Optional<MLPredictionResult> predictBestMatch(
@@ -61,79 +74,151 @@ public class MLMatchingService {
         long startTime = System.currentTimeMillis();
 
         try {
-            // 1. Charger le mod\u00e8le actif
+            // 1. Charger le modele actif
             Optional<MLModel> modelOpt = loadActiveModel(company);
             if (modelOpt.isEmpty()) {
-                log.warn("Aucun mod\u00e8le ML actif pour company {}", company.getId());
+                log.warn("Aucun modele ML actif pour company {}", company.getId());
                 return Optional.empty();
             }
 
             MLModel model = modelOpt.get();
-            RandomForest rf = modelStorageService.loadModel(model);
+            log.debug("🚀 [ML] Mode AVANCE - XGBoost avec 30 features");
 
-            if (rf == null) {
-                log.error("Impossible de charger le mod\u00e8le Random Forest depuis {}", model.getModelPath());
+            // 2. Charger modele XGBoost
+            Booster booster = loadXGBoostModel(model);
+            if (booster == null) {
+                log.error("Impossible de charger le modele XGBoost depuis {}", model.getModelPath());
                 return Optional.empty();
             }
 
-            // 2. Extraire features + pr\u00e9dire pour tous les candidats
+            // 3. Extraire features avancees + predire pour tous les candidats
             List<CandidateScore> scores = new ArrayList<>();
 
             for (GeneralLedger gl : glCandidates) {
-                MatchFeatures features = featureExtractor.extract(bt, gl);
-                double[] featureArray = features.toArray();
+                // Extraire 30 features avancees
+                AdvancedMatchFeatures advFeatures = featurePipeline.extractAllFeatures(bt, gl, company);
+                double[] featureArray = advFeatures.toArray();
 
-                // TODO: Migrer vers Smile 3.x API complète avec Tuple
-                // Pour l'instant, utiliser un score basé sur les features
-                double confidence = calculateConfidenceFromFeatures(features);
-                boolean isPredictedMatch = confidence >= 50.0;
+                // Prediction XGBoost (probabilite reelle)
+                double probability = xgboostService.predict(booster, featureArray);
+                double confidence = probability * 100.0;  // Convertir en %
+                boolean isPredictedMatch = probability >= 0.5;
 
-                scores.add(new CandidateScore(gl, features, confidence, isPredictedMatch));
+                // Convertir AdvancedMatchFeatures -> MatchFeatures pour compatibilite logs
+                MatchFeatures basicFeatures = convertToBasicFeatures(advFeatures);
+
+                scores.add(new CandidateScore(gl, basicFeatures, confidence, isPredictedMatch));
             }
 
-            // 3. Trouver le meilleur candidat (confiance max)
+            // 4. Trouver le meilleur candidat
             Optional<CandidateScore> bestOpt = scores.stream()
                 .filter(cs -> cs.isPredictedMatch)
                 .max(Comparator.comparingDouble(cs -> cs.confidence));
 
             if (bestOpt.isEmpty()) {
-                log.info("ML: Aucun match pr\u00e9dit pour BT {} parmi {} candidats",
+                log.info("ML: Aucun match predit pour BT {} parmi {} candidats",
                     bt.getId(), glCandidates.size());
                 return Optional.empty();
             }
 
             CandidateScore best = bestOpt.get();
 
-            // 4. Construire le r\u00e9sultat
+            // 5. Construire le resultat avec features avancées pour explication enrichie
             long predictionTime = System.currentTimeMillis() - startTime;
+
+            // Récupérer les features avancées du meilleur candidat
+            AdvancedMatchFeatures bestAdvFeatures = featurePipeline.extractAllFeatures(bt, best.gl, company);
+            double[] bestFeatureArray = bestAdvFeatures.toArray();
+            double bestProbability = xgboostService.predict(booster, bestFeatureArray);
+
+            // 6. Calculer SHAP explanation (explicabilité complète)
+            SHAPExplanation shapExplanation = null;
+            try {
+                shapExplanation = shapExplainerService.explainPrediction(
+                    booster,
+                    bestFeatureArray,
+                    bestAdvFeatures,
+                    bestProbability,
+                    model.getModelVersion()
+                );
+                log.debug("SHAP explanation generated - Top feature: {} (impact: {:.1f}%)",
+                    shapExplanation.getTopFeatures().isEmpty() ? "N/A" :
+                        shapExplanation.getTopFeatures().get(0).getFeatureName(),
+                    shapExplanation.getTopFeatures().isEmpty() ? 0.0 :
+                        shapExplanation.getTopFeatures().get(0).getImpactPercent());
+            } catch (Exception e) {
+                log.warn("Erreur calcul SHAP explanation: {}", e.getMessage());
+            }
 
             MLPredictionResult result = MLPredictionResult.builder()
                 .bankTransaction(bt)
                 .glEntry(best.gl)
                 .confidenceScore(best.confidence)
                 .features(best.features)
+                .advancedFeatures(bestAdvFeatures)  // Pour explication enrichie
+                .shapExplanation(shapExplanation)   // Explication SHAP complète
                 .modelVersion(model.getModelVersion())
                 .predictionTimeMs(predictionTime)
                 .build();
 
             result.generateExplanation();
 
-            // 5. Logger la pr\u00e9diction
+            // 7. Logger la prediction
             logPrediction(result, model, company);
 
-            log.info("ML: Pr\u00e9diction BT {} → GL {} avec confiance {:.1f}% ({}ms)",
+            log.info("ML: Prediction BT {} → GL {} avec confiance {:.1f}% ({}ms, XGBoost)",
                 bt.getId(), best.gl.getId(), best.confidence, predictionTime);
 
             return Optional.of(result);
 
         } catch (Exception e) {
-            log.error("Erreur pr\u00e9diction ML pour BT {}: {}", bt.getId(), e.getMessage(), e);
+            log.error("Erreur prediction ML pour BT {}: {}", bt.getId(), e.getMessage(), e);
             return Optional.empty();
         }
     }
 
     /**
-     * Pr\u00e9dit pour plusieurs transactions en batch
+     * Charge un modele XGBoost depuis le path
+     */
+    private Booster loadXGBoostModel(MLModel model) {
+        try {
+            if (model.getModelPath() == null) {
+                log.error("MLModel {} n'a pas de modelPath defini", model.getId());
+                return null;
+            }
+
+            return ml.dmlc.xgboost4j.java.XGBoost.loadModel(model.getModelPath());
+
+        } catch (Exception e) {
+            log.error("Erreur chargement modele XGBoost {}: {}", model.getModelPath(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Convertit AdvancedMatchFeatures (30) -> MatchFeatures (12) pour compatibilite logs
+     */
+    private MatchFeatures convertToBasicFeatures(AdvancedMatchFeatures advanced) {
+        // Utiliser le Builder de MatchFeatures avec les noms de champs corrects
+        return MatchFeatures.builder()
+            .amountDifference(advanced.getAmountDifference())
+            .dateDiffDays(advanced.getDateDiffCalendarDays() != null ?
+                advanced.getDateDiffCalendarDays().longValue() : 0L)
+            .textSimilarity(advanced.getTfidfCosineSimilarity())
+            .amountRatio(advanced.getAmountRatio())
+            .sameSense(advanced.getMonthDiff() != null && advanced.getMonthDiff() == 0 ? 1.0 : 0.0)
+            .referenceMatch(0.0)
+            .isRoundNumber(0.0)
+            .isMonthEnd(advanced.getIsMonthEnd())
+            .dayOfWeekBT(advanced.getDayOfWeek())
+            .dayOfWeekGL(advanced.getDayOfWeek())
+            .historicalMatchRate(advanced.getCustomerMatchRate())
+            .avgDaysHistorical(advanced.getAvgMatchingDelay())
+            .build();
+    }
+
+    /**
+     * Predit pour plusieurs transactions en batch
      */
     @Transactional
     public List<MLPredictionResult> predictBatch(
@@ -148,14 +233,14 @@ public class MLMatchingService {
             prediction.ifPresent(results::add);
         }
 
-        log.info("ML: Batch pr\u00e9diction termin\u00e9e - {} matches trouv\u00e9s sur {} transactions",
+        log.info("ML: Batch prediction terminee - {} matches trouves sur {} transactions",
             results.size(), btList.size());
 
         return results;
     }
 
     /**
-     * Pr\u00e9dit avec filtrage des candidats (optimisation)
+     * Predit avec filtrage des candidats (optimisation)
      */
     @Transactional
     public Optional<MLPredictionResult> predictWithFiltering(
@@ -163,24 +248,24 @@ public class MLMatchingService {
         List<GeneralLedger> glCandidates,
         Company company
     ) {
-        // Pré-filtre: montant ±50%, dates ±30 jours
+        // Pre-filtre: montant ±50%, dates ±30 jours
         List<GeneralLedger> filtered = glCandidates.stream()
             .filter(gl -> isReasonableCandidate(bt, gl))
             .collect(Collectors.toList());
 
         if (filtered.isEmpty()) {
-            log.debug("ML: Pr\u00e9-filtrage a \u00e9limin\u00e9 tous les candidats pour BT {}", bt.getId());
+            log.debug("ML: Pre-filtrage a elimine tous les candidats pour BT {}", bt.getId());
             return Optional.empty();
         }
 
-        log.debug("ML: Pr\u00e9-filtrage {} → {} candidats pour BT {}",
+        log.debug("ML: Pre-filtrage {} → {} candidats pour BT {}",
             glCandidates.size(), filtered.size(), bt.getId());
 
         return predictBestMatch(bt, filtered, company);
     }
 
     /**
-     * Charge le mod\u00e8le actif (avec cache)
+     * Charge le modele actif (avec cache)
      */
     @Cacheable(value = "mlModels", key = "#company.id")
     public Optional<MLModel> loadActiveModel(Company company) {
@@ -188,15 +273,15 @@ public class MLMatchingService {
     }
 
     /**
-     * Invalide le cache du mod\u00e8le (apr\u00e8s entra\u00eenement)
+     * Invalide le cache du modele (apres entrainement)
      */
     public void invalidateModelCache(Company company) {
-        // Cache eviction g\u00e9r\u00e9 par @CacheEvict dans MLTrainingService
-        log.info("Cache mod\u00e8le ML invalid\u00e9 pour company {}", company.getId());
+        // Cache eviction gere par @CacheEvict dans MLTrainingService
+        log.info("Cache modele ML invalide pour company {}", company.getId());
     }
 
     /**
-     * V\u00e9rifie si un candidat est raisonnable (pr\u00e9-filtrage)
+     * Verifie si un candidat est raisonnable (pre-filtrage)
      */
     private boolean isReasonableCandidate(BankTransaction bt, GeneralLedger gl) {
         // Montant: ±50%
@@ -220,7 +305,7 @@ public class MLMatchingService {
     }
 
     /**
-     * Log la pr\u00e9diction pour monitoring
+     * Log la prediction pour monitoring
      */
     private void logPrediction(MLPredictionResult result, MLModel model, Company company) {
         try {
@@ -240,30 +325,9 @@ public class MLMatchingService {
             result.setPredictionLogId(saved.getId());
 
         } catch (Exception e) {
-            // Ne pas bloquer la pr\u00e9diction si log \u00e9choue
-            this.log.error("Erreur log pr\u00e9diction: {}", e.getMessage());
+            // Ne pas bloquer la prediction si log echoue
+            this.log.error("Erreur log prediction: {}", e.getMessage());
         }
-    }
-
-    /**
-     * Calcule un score de confiance basé sur les features (temporaire - en attendant migration Smile 3.x)
-     *
-     * @param features Les caractéristiques de correspondance
-     * @return Score de confiance (0-100)
-     */
-    private double calculateConfidenceFromFeatures(MatchFeatures features) {
-        double score = 0.0;
-
-        // Similarité du montant (50 points max)
-        score += features.getAmountSimilarity() * 50.0;
-
-        // Similarité de la date (30 points max)
-        score += features.getDateProximity() * 30.0;
-
-        // Similarité du texte (20 points max)
-        score += features.getDescriptionSimilarity() * 20.0;
-
-        return Math.min(100.0, Math.max(0.0, score));
     }
 
     /**
@@ -285,7 +349,7 @@ public class MLMatchingService {
     }
 
     /**
-     * V\u00e9rifie si le mod\u00e8le a besoin d'un r\u00e9-entra\u00eenement
+     * Verifie si le modele a besoin d'un re-entrainement
      */
     public boolean needsRetraining(Company company) {
         Optional<MLModel> modelOpt = loadActiveModel(company);
@@ -293,17 +357,17 @@ public class MLMatchingService {
 
         MLModel model = modelOpt.get();
 
-        // Crit\u00e8re 1: Mod\u00e8le trop ancien (>30 jours)
+        // Critere 1: Modele trop ancien (>30 jours)
         if (model.getCreatedAt().isBefore(LocalDateTime.now().minusDays(30))) {
             return true;
         }
 
-        // Crit\u00e8re 2: Accuracy trop faible (<85%)
+        // Critere 2: Accuracy trop faible (<85%)
         if (model.getAccuracy().doubleValue() < 0.85) {
             return true;
         }
 
-        // Crit\u00e8re 3: Drift d\u00e9tect\u00e9 (accuracy r\u00e9elle vs entra\u00eenement)
+        // Critere 3: Drift detecte (accuracy reelle vs entrainement)
         Double realAccuracy = predictionLogRepository.calculateRealWorldAccuracy(
             company,
             LocalDateTime.now().minusDays(7)
@@ -311,8 +375,8 @@ public class MLMatchingService {
 
         if (realAccuracy != null) {
             double drift = Math.abs(model.getAccuracy().doubleValue() - realAccuracy);
-            if (drift > 0.10) {  // 10% de diff\u00e9rence
-                log.warn("Drift d\u00e9tect\u00e9 pour company {}: accuracy model={:.2f}%, r\u00e9el={:.2f}%",
+            if (drift > 0.10) {  // 10% de difference
+                log.warn("Drift detecte pour company {}: accuracy model={:.2f}%, reel={:.2f}%",
                     company.getId(), model.getAccuracy().doubleValue() * 100, realAccuracy * 100);
                 return true;
             }
@@ -322,7 +386,7 @@ public class MLMatchingService {
     }
 
     /**
-     * Retourne les statistiques du mod\u00e8le actif
+     * Retourne les statistiques du modele actif
      */
     public Map<String, Object> getModelStats(Company company) {
         Optional<MLModel> modelOpt = loadActiveModel(company);
@@ -334,10 +398,12 @@ public class MLMatchingService {
         Map<String, Object> stats = new HashMap<>();
 
         stats.put("modelVersion", model.getModelVersion());
+        stats.put("algorithm", model.getAlgorithm());
         stats.put("accuracy", model.getAccuracy());
         stats.put("f1Score", model.getF1Score());
         stats.put("createdAt", model.getCreatedAt());
-        // stats.put("trainingDataCount", model.getTrainingDataCount()); // TODO: Ajouter ce champ à MLModel
+        stats.put("mode", "ADVANCED");
+        stats.put("features", 30);
 
         // Latence moyenne sur 7 derniers jours
         Double avgLatency = predictionLogRepository.calculateAverageLatency(
@@ -346,7 +412,7 @@ public class MLMatchingService {
         );
         stats.put("avgLatencyMs", avgLatency);
 
-        // Accuracy r\u00e9elle
+        // Accuracy reelle
         Double realAccuracy = predictionLogRepository.calculateRealWorldAccuracy(
             company,
             LocalDateTime.now().minusDays(7)
