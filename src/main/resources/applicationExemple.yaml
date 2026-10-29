@@ -9,7 +9,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:predykt_db}
     username: ${DB_USER:predykt}
-    password: ${DB_PASSWORD:predykt_secure_2024}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -48,7 +48,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:redis_secure_2024}
+      password: ${REDIS_PASSWORD:}
       timeout: 2000ms
       jedis:
         pool:
@@ -65,7 +65,7 @@ spring:
   # Security
   security:
     jwt:
-      secret: "${JWT_SECRET:ae5faa418386df2e050bf848f31ef6a65eabdcb2ce3adfef330de2da1d11f1f795d8e9703b1f1ee65f829fe56a6b0dbbfbbec109644aa536cf9e3bad579c0678}"
+      secret: ${JWT_SECRET}
       expiration: ${JWT_EXPIRATION:86400000}  # 24 heures
 
 # Server
