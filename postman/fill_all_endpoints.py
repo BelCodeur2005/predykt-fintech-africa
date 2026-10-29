@@ -5,9 +5,12 @@ avec TOUS les 300+ endpoints
 """
 
 import json
+import os
+
+COLLECTION = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'PREDYKT_MODE_CABINET_COMPLETE.postman_collection.json')
 
 # Charger la collection vide
-with open('PREDYKT_MODE_CABINET_COMPLETE.postman_collection.json', 'r', encoding='utf-8') as f:
+with open(COLLECTION, 'r', encoding='utf-8') as f:
     collection = json.load(f)
 
 # Template d'endpoint
@@ -606,9 +609,9 @@ collection['item'][40]['item'] = [
 ]
 
 # Sauvegarder
-with open('PREDYKT_MODE_CABINET_COMPLETE.postman_collection.json', 'w', encoding='utf-8') as f:
+with open(COLLECTION, 'w', encoding='utf-8') as f:
     json.dump(collection, f, indent=2, ensure_ascii=False)
 
 total_endpoints = sum(len(folder['item']) for folder in collection['item'])
 print(f'[OK] Collection complète - {total_endpoints} endpoints ajoutés')
-print(f'[INFO] Fichier: PREDYKT_MODE_CABINET_COMPLETE.postman_collection.json')
+print(f'[INFO] Fichier: {COLLECTION}')
