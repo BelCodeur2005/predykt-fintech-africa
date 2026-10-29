@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.ToString;
 
 @Data
 public class RegisterRequest {
@@ -27,6 +28,7 @@ public class RegisterRequest {
 
     @NotBlank(message = "Le mot de passe est obligatoire")
     @Size(min = 8, message = "Le mot de passe doit contenir au moins 8 caractères")
+    @ToString.Exclude
     private String password;
 
     @NotBlank(message = "Le prénom est obligatoire")

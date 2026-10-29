@@ -151,6 +151,7 @@ public class MultiTenantDataSourceRouter extends AbstractRoutingDataSource {
         private Integer port;
         private String database;
         private String username;
+        @lombok.ToString.Exclude
         private String password;
         
         @lombok.Builder.Default
